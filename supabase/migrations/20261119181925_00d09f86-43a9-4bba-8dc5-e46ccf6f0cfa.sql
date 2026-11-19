@@ -1,0 +1,14 @@
+REVOKE EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.is_staff(uuid) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.is_parent_of(uuid, uuid) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.is_course_instructor(uuid, uuid) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.teaches_student(uuid, uuid) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.has_course_unlocked(uuid, uuid) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.can_access_lesson(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_staff(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_parent_of(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_course_instructor(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.teaches_student(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.has_course_unlocked(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.can_access_lesson(uuid, uuid) TO authenticated;
