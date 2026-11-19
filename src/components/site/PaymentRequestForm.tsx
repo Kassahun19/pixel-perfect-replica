@@ -25,7 +25,7 @@ export function myPaymentsQueryKey(userId: string | undefined) {
   return ["payments", "mine", userId];
 }
 
-export function PaymentRequestForm({ defaultCourseSlug, studentId, onDone }: { defaultCourseSlug?: string; studentId?: string; onDone?: () => void }) {
+export function PaymentRequestForm({ defaultCourseSlug, studentId, onDone }: { defaultCourseSlug?: string | undefined; studentId?: string | undefined; onDone?: () => void }) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { data: courses = [] } = useQuery(coursesQuery);
@@ -40,7 +40,7 @@ export function PaymentRequestForm({ defaultCourseSlug, studentId, onDone }: { d
   const m = useMutation({
     mutationFn: async () => {
       const parsed = schema.safeParse({ course_id: selected, method, reference, note: note || undefined });
-      if (!parsed.success) throw new Error(parsed.error.issues[0].message);
+      if (!parsed.success) throw new Error(parsed.error.issues[0]?.message);
       const { error } = await supabase.from("payments").insert({
         user_id: studentId ?? user!.id,
         course_id: parsed.data.course_id,

@@ -1,7 +1,7 @@
 /** Downloads rows as a CSV file that opens in Excel. */
 export function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
   if (rows.length === 0) return;
-  const headers = Object.keys(rows[0]);
+  const headers = Object.keys(rows[0]!);
   const esc = (v: unknown) => {
     const s = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;

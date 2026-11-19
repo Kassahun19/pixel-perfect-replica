@@ -10,8 +10,8 @@ import { coursesQuery } from "@/lib/queries";
 import { FREE_LESSON_LIMIT, formatETB } from "@/lib/access";
 
 export const Route = createFileRoute("/pro")({
-  validateSearch: (s: Record<string, unknown>): { course?: string } => ({
-    course: typeof s.course === "string" ? s.course : undefined,
+  validateSearch: (s: Record<string, unknown>): { course?: string | undefined } => ({
+    course: typeof s["course"] === "string" ? s["course"] : undefined,
   }),
   head: () => ({
     meta: [

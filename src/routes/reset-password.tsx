@@ -39,7 +39,7 @@ function ResetPassword() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = passwordRule.safeParse(pw);
-    if (!parsed.success) return void toast.error(parsed.error.issues[0].message);
+    if (!parsed.success) return void toast.error(parsed.error.issues[0]?.message);
     if (pw !== confirm) return void toast.error("Passwords don't match");
     const { error } = await supabase.auth.updateUser({ password: pw });
     if (error) return void toast.error(error.message);

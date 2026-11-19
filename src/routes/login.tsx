@@ -47,7 +47,7 @@ function Login() {
     e.preventDefault();
     const parsed = schema.safeParse({ email, password });
     if (!parsed.success) {
-      toast.error(parsed.error.issues[0].message);
+      toast.error(parsed.error.issues[0]?.message);
       return;
     }
     setBusy(true);

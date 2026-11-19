@@ -42,7 +42,7 @@ function Contact() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = schema.safeParse(form);
-    if (!parsed.success) return void toast.error(parsed.error.issues[0].message);
+    if (!parsed.success) return void toast.error(parsed.error.issues[0]?.message);
     setBusy(true);
     const { error } = await supabase.from("contact_messages").insert({
       name: parsed.data.name,
