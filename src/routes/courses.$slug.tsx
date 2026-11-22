@@ -96,17 +96,50 @@ function CourseDetail() {
           <ol className="mt-6 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
             {lessons.map((l, i) => {
               const free = isFreeLesson(i);
-              return (
-                <li key={l.id} className="flex items-center gap-4 px-5 py-4">
+              const content = (
+                <>
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-bold text-primary">
                     {i + 1}
                   </span>
                   <span className="flex-1 font-medium">{l.title}</span>
                   <span className="text-xs text-muted-foreground">{l.duration_minutes} min</span>
                   {free ? (
-                    <span className="rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success">Free</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success">
+                      <PlayCircle className="h-3.5 w-3.5" /> Free
+                    </span>
                   ) : (
                     <Lock className="h-4 w-4 text-muted-foreground" aria-label="Locked" />
+                  )}
+                </>
+              );
+              return (
+                <li key={l.id}>
+                  {free ? (
+                    user ? (
+                      <Link
+                        to="/dashboard/learn/$slug"
+                        params={{ slug: course.slug }}
+                        search={{ lesson: l.id }}
+                        className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-secondary/50"
+                      >
+                        {content}
+                      </Link>
+                    ) : (
+                      <Link
+                        to="/register"
+                        className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-secondary/50"
+                      >
+                        {content}
+                      </Link>
+                    )
+                  ) : (
+                    <Link
+                      to="/pro"
+                      search={{ course: course.slug }}
+                      className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-secondary/30"
+                    >
+                      {content}
+                    </Link>
                   )}
                 </li>
               );

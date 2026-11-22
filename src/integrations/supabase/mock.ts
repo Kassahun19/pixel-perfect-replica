@@ -255,19 +255,6 @@ const LESSON_SPECS: Array<[string, number, string, number]> = [
   ["spoken-english-communication", 8, "Professional emails", 18],
 ];
 
-const SAMPLE_VIDEOS = [
-  "BigBuckBunny.mp4",
-  "ElephantsDream.mp4",
-  "ForBiggerBlazes.mp4",
-  "ForBiggerEscapes.mp4",
-  "ForBiggerFun.mp4",
-  "ForBiggerJoyrides.mp4",
-  "ForBiggerMeltdowns.mp4",
-  "Sintel.mp4",
-  "TearsOfSteel.mp4",
-  "SubaruOutbackOnStreetAndDirt.mp4",
-];
-
 const courseIdBySlug = new Map(SEED_COURSES.map((c) => [c.slug, c.id]));
 
 const SEED_LESSONS = LESSON_SPECS.map(([slug, pos, title, dur], idx) => ({
@@ -283,7 +270,7 @@ const SEED_LESSONS = LESSON_SPECS.map(([slug, pos, title, dur], idx) => ({
 
 const SEED_LESSON_MEDIA = SEED_LESSONS.map((l) => ({
   lesson_id: l.id,
-  video_url: `https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/${SAMPLE_VIDEOS[(l.position - 1) % SAMPLE_VIDEOS.length]}`,
+  video_url: l.position <= 5 ? `/videos/lesson-${l.position}.mp4` : "/videos/lesson-pro.mp4",
   created_at: "2026-11-19T18:18:52Z",
   updated_at: "2026-11-19T18:18:52Z",
 }));
@@ -332,6 +319,96 @@ type StoredMockUser = {
   role: Database["public"]["Enums"]["app_role"];
 };
 
+const SEED_DEMO_PROFILES: Row[] = [
+  {
+    id: "99999999-9999-4999-8999-999999999901",
+    first_name: "Abebe",
+    last_name: "Bikila",
+    email: "abebe@ezanaacademy.et",
+    phone: "+251 911 234 567",
+    avatar_url: null,
+    bio: null,
+    status: "active",
+    created_at: "2026-11-20T09:15:00Z",
+    updated_at: "2026-11-20T09:15:00Z",
+  },
+  {
+    id: "99999999-9999-4999-8999-999999999902",
+    first_name: "Tigist",
+    last_name: "Haile",
+    email: "tigist@ezanaacademy.et",
+    phone: "+251 922 876 543",
+    avatar_url: null,
+    bio: null,
+    status: "active",
+    created_at: "2026-11-21T11:30:00Z",
+    updated_at: "2026-11-21T11:30:00Z",
+  },
+  {
+    id: "99999999-9999-4999-8999-999999999903",
+    first_name: "Dawit",
+    last_name: "Mekonnen",
+    email: "dawit@ezanaacademy.et",
+    phone: "+251 933 445 566",
+    avatar_url: null,
+    bio: null,
+    status: "active",
+    created_at: "2026-11-21T14:20:00Z",
+    updated_at: "2026-11-21T14:20:00Z",
+  },
+];
+
+const SEED_PAYMENTS: Row[] = [
+  {
+    id: "55555555-5555-4555-8555-555555555501",
+    user_id: "99999999-9999-4999-8999-999999999901",
+    course_id: "22222222-2222-4222-8222-222222222201",
+    amount: 218,
+    currency: "ETB",
+    method: "Telebirr",
+    reference: "FT26324TX891",
+    note: "Paid from 0911 234 567 (Telebirr screenshot confirmed)",
+    status: "pending",
+    reviewed_by: null,
+    reviewed_at: null,
+    review_note: null,
+    created_at: "2026-11-22T08:15:00Z",
+    updated_at: "2026-11-22T08:15:00Z",
+  },
+  {
+    id: "55555555-5555-4555-8555-555555555502",
+    user_id: "99999999-9999-4999-8999-999999999902",
+    course_id: "22222222-2222-4222-8222-222222222202",
+    amount: 218,
+    currency: "ETB",
+    method: "Bank transfer (CBE)",
+    reference: "CBE2026112204",
+    note: "Transferred via CBE mobile app to 1000 2180 0000",
+    status: "pending",
+    reviewed_by: null,
+    reviewed_at: null,
+    review_note: null,
+    created_at: "2026-11-22T09:40:00Z",
+    updated_at: "2026-11-22T09:40:00Z",
+  },
+  {
+    id: "55555555-5555-4555-8555-555555555503",
+    user_id: "99999999-9999-4999-8999-999999999903",
+    course_id: "22222222-2222-4222-8222-222222222204",
+    amount: 218,
+    currency: "ETB",
+    method: "CBE Birr",
+    reference: "CBB7741209",
+    note: "Grade 11 & 12 Maths full access",
+    status: "approved",
+    reviewed_by: null,
+    reviewed_at: "2026-11-21T16:05:00Z",
+    review_note: "Verified in CBE Birr ledger",
+    created_at: "2026-11-21T15:50:00Z",
+    updated_at: "2026-11-21T16:05:00Z",
+  },
+];
+
 const tables: Record<string, Row[]> = {
   academy_settings: [...SEED_SETTINGS],
   announcements: [...SEED_ANNOUNCEMENTS],
@@ -344,9 +421,14 @@ const tables: Record<string, Row[]> = {
   lesson_progress: [],
   lessons: [...SEED_LESSONS],
   parent_links: [],
-  payments: [],
-  profiles: [],
-  user_roles: [],
+  payments: [...SEED_PAYMENTS],
+  profiles: [...SEED_DEMO_PROFILES],
+  user_roles: SEED_DEMO_PROFILES.map((p, idx) => ({
+    id: `88888888-8888-4888-8888-88888888880${idx + 1}`,
+    user_id: p["id"],
+    role: "student",
+    created_at: p["created_at"],
+  })),
 };
 
 function readStorage<T>(key: string): T | null {
@@ -372,17 +454,7 @@ function writeStorage(key: string, value: unknown): void {
 const memoryUsers = new Map<string, StoredMockUser>();
 let memorySession: Session | null = null;
 
-function getStoredUsers(): StoredMockUser[] {
-  const fromStorage = readStorage<StoredMockUser[]>(STORAGE_USERS_KEY);
-  if (fromStorage) {
-    for (const u of fromStorage) memoryUsers.set(u.email.toLowerCase(), u);
-  }
-  return Array.from(memoryUsers.values());
-}
-
-function saveUser(u: StoredMockUser): void {
-  memoryUsers.set(u.email.toLowerCase(), u);
-  writeStorage(STORAGE_USERS_KEY, Array.from(memoryUsers.values()));
+function syncUserRow(u: StoredMockUser): void {
   if (!tables["profiles"]!.some((p) => p["id"] === u.id)) {
     tables["profiles"]!.push({
       id: u.id,
@@ -397,13 +469,51 @@ function saveUser(u: StoredMockUser): void {
       updated_at: new Date().toISOString(),
     });
   }
-  if (!tables["user_roles"]!.some((r) => r["user_id"] === u.id)) {
+  const existingRole = tables["user_roles"]!.find((r) => r["user_id"] === u.id);
+  if (!existingRole) {
     tables["user_roles"]!.push({
       id: crypto.randomUUID(),
       user_id: u.id,
       role: u.role,
       created_at: new Date().toISOString(),
     });
+  } else {
+    existingRole["role"] = u.role;
+  }
+}
+
+function getStoredUsers(): StoredMockUser[] {
+  const fromStorage = readStorage<StoredMockUser[]>(STORAGE_USERS_KEY);
+  if (fromStorage) {
+    for (const u of fromStorage) memoryUsers.set(u.email.toLowerCase(), u);
+  }
+  const list = Array.from(memoryUsers.values());
+  if (list.length > 0 && !list.some((u) => u.role === "owner")) {
+    list[0]!.role = "owner";
+    writeStorage(STORAGE_USERS_KEY, list);
+  }
+  for (const u of list) syncUserRow(u);
+  return list;
+}
+
+function saveUser(u: StoredMockUser): void {
+  memoryUsers.set(u.email.toLowerCase(), u);
+  const list = Array.from(memoryUsers.values());
+  if (list.length > 0 && !list.some((item) => item.role === "owner")) {
+    list[0]!.role = "owner";
+  }
+  writeStorage(STORAGE_USERS_KEY, list);
+  syncUserRow(u);
+}
+
+function ensurePaymentsLoaded(): void {
+  if (typeof window === "undefined") return;
+  const saved = readStorage<Row[]>(STORAGE_PAYMENTS_KEY);
+  if (saved !== null) {
+    tables["payments"] = saved;
+  } else {
+    tables["payments"] = [...SEED_PAYMENTS];
+    writeStorage(STORAGE_PAYMENTS_KEY, tables["payments"]);
   }
 }
 
@@ -437,10 +547,10 @@ function makeSession(u: StoredMockUser): Session {
 function getCurrentSession(): Session | null {
   const fromStorage = readStorage<Session>(STORAGE_SESSION_KEY);
   const s = fromStorage ?? memorySession;
+  const users = getStoredUsers();
   if (s?.user) {
-    const users = getStoredUsers();
     const existing = users.find((u) => u.id === s.user.id);
-    if (existing) saveUser(existing);
+    if (existing) syncUserRow(existing);
     else {
       const meta = (s.user.user_metadata ?? {}) as Record<string, string>;
       saveUser({
@@ -449,7 +559,7 @@ function getCurrentSession(): Session | null {
         password: "",
         first_name: meta["first_name"] ?? "",
         last_name: meta["last_name"] ?? "",
-        role: "student",
+        role: users.length === 0 ? "owner" : "student",
       });
     }
   }
@@ -501,9 +611,11 @@ class MockQueryBuilder {
 
   constructor(table: string) {
     this.table = table;
-    if (table === "payments" && typeof window !== "undefined") {
-      const saved = readStorage<Row[]>(STORAGE_PAYMENTS_KEY);
-      if (saved) tables["payments"] = saved;
+    if (table === "profiles" || table === "user_roles") {
+      getStoredUsers();
+    }
+    if (table === "payments") {
+      ensurePaymentsLoaded();
     }
   }
 
@@ -647,12 +759,7 @@ class MockQueryBuilder {
           return unlocked;
         });
       } else {
-        rows = [
-          {
-            lesson_id: "external",
-            video_url: `https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/${SAMPLE_VIDEOS[0]}`,
-          },
-        ];
+        rows = [];
       }
     }
 
