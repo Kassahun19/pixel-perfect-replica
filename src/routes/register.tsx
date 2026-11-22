@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { passwordRule } from "@/lib/validation";
+import { emailRule, passwordRule } from "@/lib/validation";
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -30,7 +30,7 @@ const schema = z
   .object({
     first_name: z.string().trim().min(1, "Enter your first name").max(60),
     last_name: z.string().trim().min(1, "Enter your last name").max(60),
-    email: z.string().trim().email("Enter a valid email").max(255),
+    email: emailRule,
     password: passwordRule,
     confirm: z.string(),
   })
@@ -67,7 +67,11 @@ function Register() {
     });
     setBusy(false);
     if (error) {
-      toast.error(error.message);
+      if (/already registered|already exists/i.test(error.message)) {
+        toast.error("This email is already registered. Please log in instead.");
+      } else {
+        toast.error(error.message);
+      }
       return;
     }
     if (data.session) {
@@ -92,7 +96,7 @@ function Register() {
 
   return (
     <AuthShell title="Create your account" subtitle="Start free. Watch 5 videos in every course.">
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form onSubmit={onSubmit} noValidate className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label htmlFor="first_name">First name</Label>
@@ -105,7 +109,7 @@ function Register() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" value={form.email} onChange={set("email")} className="h-11" autoComplete="email" />
+          <Input id="email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={form.email} onChange={set("email")} className="h-11" autoComplete="email" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
