@@ -7,6 +7,7 @@ import { AuthShell } from "@/components/site/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { emailRule, passwordRule } from "@/lib/validation";
@@ -113,12 +114,12 @@ function Register() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
-          <Input id="password" type="password" value={form.password} onChange={set("password")} className="h-11" autoComplete="new-password" />
+          <PasswordInput id="password" value={form.password} onChange={set("password")} className="h-11" autoComplete="new-password" />
           <p className="text-xs text-muted-foreground">At least 8 characters, with a letter and a number.</p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirm">Confirm password</Label>
-          <Input id="confirm" type="password" value={form.confirm} onChange={set("confirm")} className="h-11" autoComplete="new-password" />
+          <PasswordInput id="confirm" value={form.confirm} onChange={set("confirm")} className="h-11" autoComplete="new-password" />
         </div>
         <Button type="submit" variant="emerald" size="lg" className="w-full" disabled={busy}>
           {busy && <Loader2 className="animate-spin" />} Create account

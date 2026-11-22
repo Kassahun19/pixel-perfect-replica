@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AuthShell } from "@/components/site/AuthShell";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { supabase } from "@/integrations/supabase/client";
 import { passwordRule } from "@/lib/validation";
 
@@ -55,11 +55,11 @@ function ResetPassword() {
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="pw">New password</Label>
-            <Input id="pw" type="password" value={pw} onChange={(e) => setPw(e.target.value)} className="h-11" />
+            <PasswordInput id="pw" value={pw} onChange={(e) => setPw(e.target.value)} className="h-11" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirm">Confirm password</Label>
-            <Input id="confirm" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="h-11" />
+            <PasswordInput id="confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="h-11" />
           </div>
           <Button type="submit" variant="emerald" size="lg" className="w-full">Update password</Button>
         </form>
