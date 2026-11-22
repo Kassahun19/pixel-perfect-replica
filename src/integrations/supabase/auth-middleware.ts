@@ -3,6 +3,7 @@ import { createMiddleware } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './types'
+import { createMockSupabaseClient, warnMockOnce } from './mock'
 
 
 
@@ -38,13 +39,19 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
     const SUPABASE_PUBLISHABLE_KEY = process.env['SUPABASE_PUBLISHABLE_KEY'];
 
     if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-      const missing = [
-        ...(!SUPABASE_URL ? ['SUPABASE_URL'] : []),
-        ...(!SUPABASE_PUBLISHABLE_KEY ? ['SUPABASE_PUBLISHABLE_KEY'] : []),
-      ];
-      const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Connect Supabase in Lovable Cloud.`;
-      console.error(`[Supabase] ${message}`);
-      throw new Error(message);
+      warnMockOnce('auth-middleware');
+      const mockClient = createMockSupabaseClient();
+      const { data } = await mockClient.auth.getUser();
+      if (!data.user) {
+        throw new Error('Unauthorized: Not signed in');
+      }
+      return next({
+        context: {
+          supabase: mockClient,
+          userId: data.user.id,
+          claims: { sub: data.user.id },
+        },
+      });
     }
     
     const request = getRequest();

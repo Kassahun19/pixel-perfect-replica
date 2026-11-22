@@ -2,10 +2,15 @@ import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
+import { createMockSupabaseClient, warnMockOnce } from "@/integrations/supabase/mock";
 
 function publicClient() {
-  const url = process.env["SUPABASE_URL"]!;
-  const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
+  const url = process.env["SUPABASE_URL"];
+  const key = process.env["SUPABASE_PUBLISHABLE_KEY"];
+  if (!url || !key) {
+    warnMockOnce("public.functions");
+    return createMockSupabaseClient();
+  }
   const isOpaque = key.startsWith("sb_publishable_") || key.startsWith("sb_secret_");
   const shim: typeof fetch = (input, init) => {
     const headers = new Headers(init?.headers);
