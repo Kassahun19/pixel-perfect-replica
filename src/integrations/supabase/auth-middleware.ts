@@ -32,6 +32,10 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
+type SupabaseClaims = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof createClient<Database>>['auth']['getClaims']>>['data']
+>['claims']
+
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
     
@@ -49,7 +53,8 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
         context: {
           supabase: mockClient,
           userId: data.user.id,
-          claims: { sub: data.user.id },
+          // Mock sessions only carry the user id; cast to the real claims shape.
+          claims: { sub: data.user.id } as unknown as SupabaseClaims,
         },
       });
     }

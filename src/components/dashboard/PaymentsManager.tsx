@@ -6,7 +6,10 @@ import {
   Clock,
   Crown,
   Download,
+  ExternalLink,
   Eye,
+  FileText,
+  Paperclip,
   Receipt,
   RotateCcw,
   Search,
@@ -19,6 +22,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/lib/auth";
 import { coursesQuery } from "@/lib/queries";
 import { formatETB } from "@/lib/access";
+import { RECEIPT_BUCKET } from "@/lib/payment-info";
 import { downloadCsv, logAudit } from "@/lib/csv";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -142,6 +146,41 @@ function formatDate(iso: string | null | undefined): string {
   }
 }
 
+function ReceiptPreview({ path }: { path: string | null }) {
+  const { data: url, isLoading, error } = useQuery({
+    queryKey: ["receipt-url", path],
+    enabled: !!path,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error: err } = await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(path!, 60 * 10);
+      if (err) throw new Error(err.message);
+      return data.signedUrl;
+    },
+  });
+  if (!path) return <p className="text-sm text-muted-foreground">No receipt uploaded — check the reference only.</p>;
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading receipt…</p>;
+  if (error || !url) return <p className="text-sm text-destructive">Couldn't load the receipt file.</p>;
+  const isPdf = path.toLowerCase().endsWith(".pdf");
+  return (
+    <div className="space-y-2">
+      {isPdf ? (
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+          <FileText className="h-4 w-4 text-primary" /> PDF receipt
+        </div>
+      ) : (
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <img src={url} alt="Payment receipt" className="max-h-72 w-full rounded-lg border border-border bg-card object-contain" />
+        </a>
+      )}
+      <Button asChild variant="outline" size="sm">
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <ExternalLink className="h-3.5 w-3.5" /> Open full receipt
+        </a>
+      </Button>
+    </div>
+  );
+}
+
 export function PaymentsManager({ pendingOnly = false }: { pendingOnly?: boolean }) {
   const { user, isStaff } = useAuth();
   const qc = useQueryClient();
@@ -203,6 +242,9 @@ export function PaymentsManager({ pendingOnly = false }: { pendingOnly?: boolean
     mutationFn: async (payment: EnrichedPayment) => {
       const { error: err } = await supabase.from("payments").delete().eq("id", payment.id);
       if (err) throw new Error(err.message);
+      if (payment.receipt_path) {
+        await supabase.storage.from(RECEIPT_BUCKET).remove([payment.receipt_path]);
+      }
       await logAudit("payment_deleted", "payment", payment.id, {
         reference: payment.reference,
         course_id: payment.course_id,
@@ -262,6 +304,7 @@ export function PaymentsManager({ pendingOnly = false }: { pendingOnly?: boolean
         currency: p.currency,
         status: p.status,
         note: p.note ?? "",
+        receipt_attached: p.receipt_path ? "yes" : "no",
         review_note: p.review_note ?? "",
         submitted_at: p.created_at,
         reviewed_at: p.reviewed_at ?? "",
@@ -427,6 +470,11 @@ export function PaymentsManager({ pendingOnly = false }: { pendingOnly?: boolean
                   <TableCell>
                     <p className="font-mono text-xs font-bold text-foreground">{p.reference}</p>
                     <p className="text-xs text-muted-foreground">{p.method}</p>
+                    {p.receipt_path && (
+                      <p className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-primary">
+                        <Paperclip className="h-3 w-3" /> Receipt attached
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell className="font-semibold">
                     {formatETB(Number(p.amount))}
@@ -538,7 +586,7 @@ export function PaymentsManager({ pendingOnly = false }: { pendingOnly?: boolean
 
       {/* Inspect Receipt Dialog */}
       <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Receipt className="h-5 w-5 text-primary" /> Payment Receipt
@@ -606,6 +654,14 @@ export function PaymentsManager({ pendingOnly = false }: { pendingOnly?: boolean
                     <p className="mt-0.5 text-muted-foreground">{selected.note}</p>
                   </div>
                 )}
+                <div className="col-span-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Receipt file
+                  </p>
+                  <div className="mt-1.5">
+                    <ReceiptPreview path={selected.receipt_path} />
+                  </div>
+                </div>
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     Submitted

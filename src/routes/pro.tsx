@@ -4,6 +4,8 @@ import { Lock } from "lucide-react";
 import { PublicLayout } from "@/components/site/PublicLayout";
 import { ProPlanCard } from "@/components/site/ProPlanCard";
 import { PaymentRequestForm } from "@/components/site/PaymentRequestForm";
+import { PaymentAccounts, PayOnlineButton } from "@/components/site/PaymentAccounts";
+import { MyPaymentStatus } from "@/components/site/MyPaymentStatus";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { coursesQuery } from "@/lib/queries";
@@ -49,13 +51,22 @@ function Pro() {
         </div>
       </section>
       <section className="mx-auto -mt-10 grid max-w-6xl gap-8 px-4 sm:px-6 lg:grid-cols-2">
-        <div className="animate-fade-up"><ProPlanCard /></div>
+        <div className="animate-fade-up">
+          <ProPlanCard>
+            <PayOnlineButton className="w-full" />
+            <p className="mt-3 text-center text-xs text-deep-muted">Or pay by bank, Telebirr or Bybit using the account details shown with the payment form.</p>
+          </ProPlanCard>
+        </div>
         <div className="animate-fade-up rounded-[2rem] border border-border bg-card p-8 shadow-soft [animation-delay:150ms] md:p-10">
           <h2 className="text-3xl font-semibold">Pay and unlock</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Send your payment, then enter the transaction reference. We'll unlock the course as soon as our team confirms it.
+            Pay online or by transfer, then submit your transaction reference and receipt. Your payment shows as Pending until our team approves it.
           </p>
           <div className="mt-6">
+            <PaymentAccounts />
+          </div>
+          <h3 className="mt-8 text-xl font-semibold">Submit your payment</h3>
+          <div className="mt-4">
             {user ? (
               <PaymentRequestForm defaultCourseSlug={course} />
             ) : (
@@ -70,6 +81,11 @@ function Pro() {
           </div>
         </div>
       </section>
+      {user && (
+        <section className="mx-auto mt-8 max-w-6xl px-4 pb-4 sm:px-6">
+          <MyPaymentStatus userId={user.id} />
+        </section>
+      )}
     </PublicLayout>
   );
 }
