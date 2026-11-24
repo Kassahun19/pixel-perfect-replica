@@ -6,7 +6,7 @@ import { CourseCard } from "@/components/site/CourseCard";
 import { Button } from "@/components/ui/button";
 import { coursesQuery } from "@/lib/queries";
 import { FREE_LESSON_LIMIT, formatETB } from "@/lib/access";
-import hero from "@/assets/ezana-hero.jpg.asset.json";
+import hero from "@/assets/ezana-hero.jpg";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -88,7 +88,7 @@ function Home() {
           <div className="relative animate-fade-up [animation-delay:250ms]">
             <div className="absolute -inset-4 rounded-[2rem] bg-gold-gradient opacity-30 blur-2xl" />
             <div className="relative overflow-hidden rounded-[2rem] border border-gold/30 shadow-elegant">
-              <img src={hero.url} alt="Ethiopian students learning online at Ezana Academy" className="aspect-[4/3] w-full object-cover" />
+              <img src={hero} alt="Ethiopian students learning online at Ezana Academy" className="aspect-[4/3] w-full object-cover" />
             </div>
             <div className="absolute -bottom-6 -left-6 hidden animate-float rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-elegant sm:block">
               <div className="flex items-center gap-3">

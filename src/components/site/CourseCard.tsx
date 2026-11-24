@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Clock, PlayCircle, Sparkles } from "lucide-react";
 import type { PublicCourse } from "@/lib/public.functions";
 import { FREE_LESSON_LIMIT, formatETB } from "@/lib/access";
+import { courseImageUrl } from "@/lib/course-image";
 
 export function CourseCard({ course, index = 0 }: { course: PublicCourse; index?: number }) {
   return (
@@ -12,9 +13,9 @@ export function CourseCard({ course, index = 0 }: { course: PublicCourse; index?
       style={{ animationDelay: `${index * 80}ms` }}
     >
       <div className="relative aspect-[16/10] overflow-hidden">
-        {course.image_url && (
+        {courseImageUrl(course.image_url) && (
           <img
-            src={course.image_url}
+            src={courseImageUrl(course.image_url)}
             alt={course.title}
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"

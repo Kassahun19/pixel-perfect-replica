@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Crown, Lock, PlayCircle } from "lucide-react";
+import { Crown, Lock, PlayCircle, Check } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { courseQuery } from "@/lib/queries";
 import { useAuth } from "@/lib/auth";
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/_authenticated/dashboard/learn/$slug")({
 function Player() {
   const { slug } = Route.useParams();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery(courseQuery(slug));
   const courseId = data?.course.id;
   const { data: unlocked = false } = useQuery({
@@ -30,6 +32,26 @@ function Player() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const lessons = data?.lessons ?? [];
   const current = lessons.find((l) => l.id === activeId) ?? lessons[0];
+  const { data: completedLessons = [] } = useQuery({
+    queryKey: ["lesson-progress", courseId, user?.id],
+    enabled: !!courseId && !!user,
+    queryFn: async () => {
+      const { data: progress, error } = await supabase.from("lesson_progress").select("lesson_id").eq("course_id", courseId!).eq("user_id", user!.id);
+      if (error) throw error;
+      return progress ?? [];
+    },
+  });
+  const isCurrentComplete = !!current && completedLessons.some((p) => p.lesson_id === current.id);
+  async function markCurrentComplete() {
+    if (!current || !courseId || !user || isCurrentComplete) return;
+    const { error } = await supabase.from("lesson_progress").insert({ user_id: user.id, lesson_id: current.id, course_id: courseId });
+    if (error && error.code !== "23505") { toast.error(error.message); return; }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["lesson-progress", courseId, user.id] }),
+      queryClient.invalidateQueries({ queryKey: ["role-dashboard"] }),
+    ]);
+    toast.success("Lesson marked complete");
+  }
   const { data: video } = useQuery({
     queryKey: ["video", current?.id],
     enabled: !!current,
@@ -38,6 +60,7 @@ function Player() {
       return m?.video_url ?? null;
     },
   });
+  const youtubeEmbed = video ? youtubeEmbedUrl(video) : null;
 
   if (isLoading) return <LoadingBlock />;
   if (!data) return <p>Course not found.</p>;
@@ -47,7 +70,11 @@ function Player() {
       <div>
         <div className="overflow-hidden rounded-2xl bg-deep">
           {video ? (
-            <video key={video} src={video} controls className="aspect-video w-full" />
+            youtubeEmbed ? (
+              <iframe key={video} src={youtubeEmbed} title={current?.title ?? "Course video"} className="aspect-video w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+            ) : (
+              <video key={video} src={video} controls playsInline onEnded={() => void markCurrentComplete()} className="aspect-video w-full" />
+            )
           ) : (
             <div className="flex aspect-video flex-col items-center justify-center gap-3 text-deep-foreground">
               <Lock className="h-10 w-10 text-gold" />
@@ -58,6 +85,7 @@ function Player() {
         </div>
         <h1 className="mt-6 text-3xl font-semibold">{current?.title}</h1>
         <p className="text-muted-foreground">{data.course.title}</p>
+        {user && current && <Button className="mt-4" variant={isCurrentComplete ? "outline" : "emerald"} disabled={isCurrentComplete} onClick={() => void markCurrentComplete()}>{isCurrentComplete ? <><Check /> Completed</> : "Mark lesson complete"}</Button>}
       </div>
       <ol className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
         {lessons.map((l, i) => {
@@ -84,4 +112,18 @@ function Player() {
       </ol>
     </div>
   );
+}
+
+function youtubeEmbedUrl(value: string) {
+  try {
+    const url = new URL(value);
+    let id = "";
+    if (url.hostname === "youtu.be" || url.hostname.endsWith(".youtu.be")) id = url.pathname.slice(1).split("/")[0] ?? "";
+    else if (url.hostname.includes("youtube.com") || url.hostname.includes("youtube-nocookie.com")) {
+      id = url.searchParams.get("v") ?? url.pathname.match(/\/(?:embed|shorts|live)\/([^/?]+)/)?.[1] ?? "";
+    }
+    return /^[a-zA-Z0-9_-]{11}$/.test(id)
+      ? `https://www.youtube-nocookie.com/embed/${id}?rel=0&modestbranding=1&playsinline=1&autoplay=1`
+      : null;
+  } catch { return null; }
 }

@@ -22,7 +22,7 @@ function DashboardLayout() {
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
         <nav className="mb-8 flex flex-wrap gap-2 text-sm font-semibold">
           <Link to="/dashboard" activeOptions={{ exact: true }} className="rounded-full border border-border px-4 py-2 data-[status=active]:bg-primary data-[status=active]:text-primary-foreground">
-            My courses
+            Dashboard
           </Link>
           <Link to="/pro" className="rounded-full border border-border px-4 py-2">Ezana Pro</Link>
         </nav>

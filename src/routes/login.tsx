@@ -58,7 +58,7 @@ function Login() {
       return;
     }
     toast.success("Welcome back!");
-    navigate({ to: "/dashboard", replace: true });
+    window.location.replace("/dashboard");
   }
 
   async function sendReset(e: React.FormEvent) {

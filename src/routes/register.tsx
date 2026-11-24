@@ -72,7 +72,7 @@ function Register() {
     }
     if (data.session) {
       toast.success("Welcome to Ezana Academy!");
-      navigate({ to: "/dashboard", replace: true });
+      window.location.replace("/dashboard");
     } else {
       setSentTo(parsed.data.email);
     }
