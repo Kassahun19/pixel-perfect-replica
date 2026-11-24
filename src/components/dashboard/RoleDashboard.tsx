@@ -304,7 +304,7 @@ export function RoleDashboard() {
   async function deletePayment(payment: Payment) {
     if (role !== "owner") return;
     setBusy(true);
-    const receiptPath = paymentReceiptPath(payment.note);
+    const receiptPath = paymentReceiptPath(payment);
     if (receiptPath) {
       const { error: receiptError } = await supabase.storage.from("payment-receipts").remove([receiptPath]);
       if (receiptError) { setBusy(false); toast.error(`Could not delete the receipt: ${receiptError.message}`); return; }
@@ -722,17 +722,53 @@ function PaymentsSection({ role, data, profilesById, coursesById, childId, busy,
   const rows = childId ? data.payments.filter((p) => p.user_id === childId) : data.payments;
   const pendingTotal = rows.filter((p) => p.status === "pending").reduce((sum, p) => sum + Number(p.amount), 0);
   const approvedTotal = rows.filter((p) => p.status === "approved").reduce((sum, p) => sum + Number(p.amount), 0);
-  return <><PageHeader title={staff ? "Fees & payments" : "Payment history"} description={staff ? "Review receipts and resolve course upgrade requests." : role === "parent" ? "Payments for the selected linked child. Only confirmed payment states are displayed." : "Track submitted payments for your course upgrades."} actions={staff ? <Badge variant="gold">{currency(pendingTotal)} pending</Badge> : undefined} /><div className="mb-5 grid gap-4 sm:grid-cols-2"><StatCard label="Approved" value={currency(approvedTotal)} icon={BadgeCheck} tone="emerald" index={0} /><StatCard label="Pending" value={currency(pendingTotal)} icon={Wallet} tone="gold" index={1} /></div><Panel>{rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground"><tr>{staff && <th className="pb-3 pr-4">Learner</th>}<th className="pb-3 pr-4">Course</th><th className="pb-3 pr-4">Amount</th><th className="pb-3 pr-4">Method & reference</th><th className="pb-3 pr-4">Receipt</th><th className="pb-3 pr-4">Submitted</th><th className="pb-3 pr-4">Status</th>{staff && <th className="pb-3">Actions</th>}</tr></thead><tbody className="divide-y divide-border">{rows.map((p) => <tr key={p.id}><>{staff && <td className="py-4 pr-4"><p className="font-semibold">{profilesById.get(p.user_id) ? displayName(profilesById.get(p.user_id)!) : "Learner"}</p><p className="text-xs text-muted-foreground">{profilesById.get(p.user_id)?.email}</p></td>}</><td className="py-4 pr-4 font-medium">{coursesById.get(p.course_id)?.title ?? "Course"}</td><td className="py-4 pr-4 font-semibold">{currency(Number(p.amount))}</td><td className="py-4 pr-4"><p>{p.method}</p><p className="text-xs text-muted-foreground">{p.reference}</p></td><td className="py-4 pr-4">{paymentReceiptPath(p.note) ? <button className="text-primary underline" onClick={() => void openPaymentReceipt(p.note!)}>View receipt</button> : <span className="text-muted-foreground">—</span>}</td><td className="py-4 pr-4 text-muted-foreground">{dateLabel(p.created_at)}</td><td className="py-4 pr-4"><Badge variant={p.status === "approved" ? "success" : p.status === "rejected" ? "destructive" : "warning"}>{p.status}</Badge></td>{staff && <td className="py-4"><div className="flex flex-wrap gap-2">{p.status === "pending" ? <><ConfirmButton trigger={<Button size="sm" variant="emerald" disabled={busy}>Approve</Button>} title="Approve this payment?" description={`${currency(Number(p.amount))} for ${coursesById.get(p.course_id)?.title ?? "this course"}. Approval unlocks course access.`} confirmLabel="Approve payment" destructive={false} onConfirm={() => void onReview(p, "approved")} /><ConfirmButton trigger={<Button size="sm" variant="outline" className="text-destructive" disabled={busy}>Reject</Button>} title="Reject this payment?" description="The learner will need to submit a new payment request." confirmLabel="Reject payment" onConfirm={() => void onReview(p, "rejected")} /></> : <span className="text-xs text-muted-foreground">Reviewed</span>}{owner && <ConfirmButton trigger={<Button size="sm" variant="outline" className="text-destructive" disabled={busy}>Delete</Button>} title="Delete this payment record?" description="This permanently removes the payment request and its status history." confirmLabel="Delete record" onConfirm={() => void onDelete(p)} />}</div></td>}</tr>)}</tbody></table></div> : <EmptyState title="No payment records" text={staff ? "Submitted upgrade requests will appear here for review." : "Your submitted payment requests will appear here."} icon={Wallet} />}</Panel></>;
+  return (
+    <>
+      <PageHeader title={staff ? "Fees & payments" : "Payment history"} description={staff ? "Review receipts and resolve course upgrade requests." : role === "parent" ? "Payments for the selected linked child. Only confirmed payment states are displayed." : "Track submitted payments for your course upgrades."} actions={staff ? <Badge variant="gold">{currency(pendingTotal)} pending</Badge> : undefined} />
+      <div className="mb-5 grid gap-4 sm:grid-cols-2">
+        <StatCard label="Approved" value={currency(approvedTotal)} icon={BadgeCheck} tone="emerald" index={0} />
+        <StatCard label="Pending" value={currency(pendingTotal)} icon={Wallet} tone="gold" index={1} />
+      </div>
+      <Panel>
+        {rows.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>{staff && <th className="pb-3 pr-4">Learner</th>}<th className="pb-3 pr-4">Course</th><th className="pb-3 pr-4">Amount</th><th className="pb-3 pr-4">Method & reference</th><th className="pb-3 pr-4">Receipt</th><th className="pb-3 pr-4">Submitted</th><th className="pb-3 pr-4">Status</th>{staff && <th className="pb-3">Actions</th>}</tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rows.map((p) => {
+                  const receiptPath = paymentReceiptPath(p);
+                  return (
+                    <tr key={p.id}>
+                      {staff && <td className="py-4 pr-4"><p className="font-semibold">{profilesById.get(p.user_id) ? displayName(profilesById.get(p.user_id)!) : "Learner"}</p><p className="text-xs text-muted-foreground">{profilesById.get(p.user_id)?.email}</p></td>}
+                      <td className="py-4 pr-4 font-medium">{coursesById.get(p.course_id)?.title ?? "Course"}</td>
+                      <td className="py-4 pr-4 font-semibold">{currency(Number(p.amount))}</td>
+                      <td className="py-4 pr-4"><p>{p.method}</p><p className="text-xs text-muted-foreground">{p.reference}</p></td>
+                      <td className="py-4 pr-4">{receiptPath ? <button className="text-primary underline" onClick={() => void openPaymentReceipt(receiptPath)}>View receipt</button> : <span className="text-muted-foreground">—</span>}</td>
+                      <td className="py-4 pr-4 text-muted-foreground">{dateLabel(p.created_at)}</td>
+                      <td className="py-4 pr-4"><Badge variant={p.status === "approved" ? "success" : p.status === "rejected" ? "destructive" : "warning"}>{p.status}</Badge></td>
+                      {staff && <td className="py-4"><div className="flex flex-wrap gap-2">{p.status === "pending" ? <><ConfirmButton trigger={<Button size="sm" variant="emerald" disabled={busy}>Approve</Button>} title="Approve this payment?" description={`${currency(Number(p.amount))} for ${coursesById.get(p.course_id)?.title ?? "this course"}. Approval unlocks course access.`} confirmLabel="Approve payment" destructive={false} onConfirm={() => void onReview(p, "approved")} /><ConfirmButton trigger={<Button size="sm" variant="outline" className="text-destructive" disabled={busy}>Reject</Button>} title="Reject this payment?" description="The learner will need to submit a new payment request." confirmLabel="Reject payment" onConfirm={() => void onReview(p, "rejected")} /></> : <span className="text-xs text-muted-foreground">Reviewed</span>}{owner && <ConfirmButton trigger={<Button size="sm" variant="outline" className="text-destructive" disabled={busy}>Delete</Button>} title="Delete this payment record?" description="This permanently removes the payment request and its status history." confirmLabel="Delete record" onConfirm={() => void onDelete(p)} />}</div></td>}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : <EmptyState title="No payment records" text={staff ? "Submitted upgrade requests will appear here for review." : "Your submitted payment requests will appear here."} icon={Wallet} />}
+      </Panel>
+    </>
+  );
 }
 
-function paymentReceiptPath(note: string | null) {
+function paymentReceiptPath(payment: Payment) {
+  if (payment.receipt_path) return payment.receipt_path;
+  const note = payment.note;
   if (!note?.startsWith("[receipt-path]")) return null;
   return note.slice("[receipt-path]".length).split("\n", 1)[0] || null;
 }
 
-async function openPaymentReceipt(note: string) {
-  const path = paymentReceiptPath(note);
-  if (!path) return;
+async function openPaymentReceipt(path: string) {
   const { data, error } = await supabase.storage.from("payment-receipts").createSignedUrl(path, 60);
   if (error || !data?.signedUrl) { toast.error(error?.message ?? "Could not open this receipt"); return; }
   window.open(data.signedUrl, "_blank", "noopener,noreferrer");

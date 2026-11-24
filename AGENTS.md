@@ -28,3 +28,8 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- Payment receipts live in the private `payment-receipts` bucket under `<uploader id>/...`; `payments.receipt_path` stores the path and staff view it via short-lived signed URLs — keeps receipts private to the payer and Owner/Admin.
+- Payment accounts, the online pay link and receipt limits live only in `src/lib/payment-info.ts` — one place to update when the owner changes them.
+- Lesson videos render through `VideoPlayer` (direct files or YouTube embeds, with a bundled fallback clip) — so any video link format plays in-site.

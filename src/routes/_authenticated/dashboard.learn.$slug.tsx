@@ -1,22 +1,32 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Crown, Lock, PlayCircle, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Crown, Film, Lock, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { courseQuery } from "@/lib/queries";
 import { useAuth } from "@/lib/auth";
-import { isLessonLocked } from "@/lib/access";
+import { isFreeLesson, isLessonLocked } from "@/lib/access";
 import { Button } from "@/components/ui/button";
 import { LoadingBlock } from "@/components/dashboard/ui";
+import { VideoPlayer } from "@/components/dashboard/VideoPlayer";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/dashboard/learn/$slug")({
+  validateSearch: (s: Record<string, unknown>): { lesson?: string | undefined } => ({
+    lesson: typeof s["lesson"] === "string" ? s["lesson"] : undefined,
+  }),
   component: Player,
 });
 
+/** Bundled sample clip used if a lesson's own video can't be loaded. */
+function localFallbackVideo(lessonIndex: number): string {
+  return isFreeLesson(lessonIndex) ? `/videos/lesson-${lessonIndex + 1}.mp4` : "/videos/lesson-pro.mp4";
+}
+
 function Player() {
   const { slug } = Route.useParams();
+  const { lesson: initialLessonId } = Route.useSearch();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery(courseQuery(slug));
@@ -25,13 +35,33 @@ function Player() {
     queryKey: ["unlocked", courseId, user?.id],
     enabled: !!courseId && !!user,
     queryFn: async () => {
-      const { data: p } = await supabase.from("payments").select("id").eq("course_id", courseId!).eq("user_id", user!.id).eq("status", "approved").limit(1);
+      const { data: p } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("course_id", courseId!)
+        .eq("user_id", user!.id)
+        .eq("status", "approved")
+        .limit(1);
       return (p ?? []).length > 0;
     },
   });
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(initialLessonId ?? null);
+  const [autoPlay, setAutoPlay] = useState(Boolean(initialLessonId));
+
+  useEffect(() => {
+    if (initialLessonId) {
+      setActiveId(initialLessonId);
+      setAutoPlay(true);
+    }
+  }, [initialLessonId]);
+
   const lessons = data?.lessons ?? [];
-  const current = lessons.find((l) => l.id === activeId) ?? lessons[0];
+  const activeIndex = Math.max(
+    0,
+    lessons.findIndex((l) => l.id === activeId),
+  );
+  const current = lessons[activeIndex] ?? lessons[0];
+  const currentLocked = current ? isLessonLocked(activeIndex, { unlocked, signedIn: !!user }) : true;
   const { data: completedLessons = [] } = useQuery({
     queryKey: ["lesson-progress", courseId, user?.id],
     enabled: !!courseId && !!user,
@@ -42,6 +72,7 @@ function Player() {
     },
   });
   const isCurrentComplete = !!current && completedLessons.some((p) => p.lesson_id === current.id);
+
   async function markCurrentComplete() {
     if (!current || !courseId || !user || isCurrentComplete) return;
     const { error } = await supabase.from("lesson_progress").insert({ user_id: user.id, lesson_id: current.id, course_id: courseId });
@@ -52,15 +83,19 @@ function Player() {
     ]);
     toast.success("Lesson marked complete");
   }
-  const { data: video } = useQuery({
-    queryKey: ["video", current?.id],
-    enabled: !!current,
+
+  const { data: video, isLoading: videoLoading } = useQuery({
+    queryKey: ["video", current?.id, unlocked],
+    enabled: !!current && !currentLocked,
     queryFn: async () => {
-      const { data: m } = await supabase.from("lesson_media").select("video_url").eq("lesson_id", current!.id).maybeSingle();
-      return m?.video_url ?? null;
+      const { data: m } = await supabase
+        .from("lesson_media")
+        .select("video_url")
+        .eq("lesson_id", current!.id)
+        .maybeSingle();
+      return m?.video_url?.trim() || null;
     },
   });
-  const youtubeEmbed = video ? youtubeEmbedUrl(video) : null;
 
   if (isLoading) return <LoadingBlock />;
   if (!data) return <p>Course not found.</p>;
@@ -69,23 +104,36 @@ function Player() {
     <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
       <div>
         <div className="overflow-hidden rounded-2xl bg-deep">
-          {video ? (
-            youtubeEmbed ? (
-              <iframe key={video} src={youtubeEmbed} title={current?.title ?? "Course video"} className="aspect-video w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
-            ) : (
-              <video key={video} src={video} controls playsInline onEnded={() => void markCurrentComplete()} className="aspect-video w-full" />
-            )
-          ) : (
+          {currentLocked ? (
             <div className="flex aspect-video flex-col items-center justify-center gap-3 text-deep-foreground">
               <Lock className="h-10 w-10 text-gold" />
               <p>Upgrade to Ezana Pro to watch this video.</p>
-              <Button asChild variant="hero"><Link to="/pro" search={{ course: slug }}><Crown /> Upgrade</Link></Button>
+              <Button asChild variant="hero">
+                <Link to="/pro" search={{ course: slug }}>
+                  <Crown /> Upgrade
+                </Link>
+              </Button>
+            </div>
+          ) : videoLoading ? (
+            <div className="flex aspect-video items-center justify-center text-deep-muted">Loading video…</div>
+          ) : video && current ? (
+            <VideoPlayer
+              key={`${current.id}-${video}`}
+              url={video}
+              title={current.title}
+              autoPlay={autoPlay}
+              fallbackUrl={localFallbackVideo(activeIndex)}
+            />
+          ) : (
+            <div className="flex aspect-video flex-col items-center justify-center gap-3 text-deep-foreground">
+              <Film className="h-10 w-10 text-gold" />
+              <p>This lesson's video isn't available yet.</p>
             </div>
           )}
         </div>
         <h1 className="mt-6 text-3xl font-semibold">{current?.title}</h1>
         <p className="text-muted-foreground">{data.course.title}</p>
-        {user && current && <Button className="mt-4" variant={isCurrentComplete ? "outline" : "emerald"} disabled={isCurrentComplete} onClick={() => void markCurrentComplete()}>{isCurrentComplete ? <><Check /> Completed</> : "Mark lesson complete"}</Button>}
+        {user && current && !currentLocked && <Button className="mt-4" variant={isCurrentComplete ? "outline" : "emerald"} disabled={isCurrentComplete} onClick={() => void markCurrentComplete()}>{isCurrentComplete ? <><Check /> Completed</> : "Mark lesson complete"}</Button>}
       </div>
       <ol className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
         {lessons.map((l, i) => {
@@ -94,15 +142,33 @@ function Player() {
             <>
               <span className="w-6 text-sm font-bold text-primary">{i + 1}</span>
               <span className="flex-1 text-sm font-medium">{l.title}</span>
-              {locked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <PlayCircle className="h-4 w-4 text-primary" />}
+              {locked ? (
+                <Lock className="h-4 w-4 text-muted-foreground" />
+              ) : completedLessons.some((p) => p.lesson_id === l.id) ? (
+                <Check className="h-4 w-4 text-primary" />
+              ) : (
+                <PlayCircle className="h-4 w-4 text-primary" />
+              )}
             </>
           );
           return (
             <li key={l.id}>
               {locked ? (
-                <Link to="/pro" search={{ course: slug }} className="flex items-center gap-3 px-4 py-3 opacity-70">{inner}</Link>
+                <Link to="/pro" search={{ course: slug }} className="flex items-center gap-3 px-4 py-3 opacity-70 hover:bg-secondary/40">
+                  {inner}
+                </Link>
               ) : (
-                <button onClick={() => setActiveId(l.id)} className={cn("flex w-full items-center gap-3 px-4 py-3 text-left", current?.id === l.id && "bg-secondary")}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveId(l.id);
+                    setAutoPlay(true);
+                  }}
+                  className={cn(
+                    "flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/60",
+                    current?.id === l.id && "bg-secondary",
+                  )}
+                >
                   {inner}
                 </button>
               )}
@@ -112,18 +178,4 @@ function Player() {
       </ol>
     </div>
   );
-}
-
-function youtubeEmbedUrl(value: string) {
-  try {
-    const url = new URL(value);
-    let id = "";
-    if (url.hostname === "youtu.be" || url.hostname.endsWith(".youtu.be")) id = url.pathname.slice(1).split("/")[0] ?? "";
-    else if (url.hostname.includes("youtube.com") || url.hostname.includes("youtube-nocookie.com")) {
-      id = url.searchParams.get("v") ?? url.pathname.match(/\/(?:embed|shorts|live)\/([^/?]+)/)?.[1] ?? "";
-    }
-    return /^[a-zA-Z0-9_-]{11}$/.test(id)
-      ? `https://www.youtube-nocookie.com/embed/${id}?rel=0&modestbranding=1&playsinline=1&autoplay=1`
-      : null;
-  } catch { return null; }
 }

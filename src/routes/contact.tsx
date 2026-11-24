@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { settingsQuery } from "@/lib/queries";
+import { emailRule } from "@/lib/validation";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
@@ -28,7 +29,7 @@ export const Route = createFileRoute("/contact")({
 
 const schema = z.object({
   name: z.string().trim().min(1, "Enter your name").max(120),
-  email: z.string().trim().email("Enter a valid email").max(255),
+  email: emailRule,
   subject: z.string().trim().max(200),
   message: z.string().trim().min(5, "Write a short message").max(5000),
 });
@@ -96,7 +97,7 @@ function Contact() {
               <Button variant="outline" className="mt-6" onClick={() => setSent(false)}>Send another</Button>
             </div>
           ) : (
-            <form onSubmit={onSubmit} className="space-y-5">
+            <form onSubmit={onSubmit} noValidate className="space-y-5">
               <h2 className="text-3xl font-semibold">Send a message</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
@@ -105,7 +106,7 @@ function Contact() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-11" />
+                  <Input id="email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-11" />
                 </div>
               </div>
               <div className="space-y-2">

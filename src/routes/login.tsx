@@ -7,9 +7,11 @@ import { AuthShell } from "@/components/site/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { emailRule } from "@/lib/validation";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -26,7 +28,7 @@ export const Route = createFileRoute("/login")({
 });
 
 const schema = z.object({
-  email: z.string().trim().email("Enter a valid email").max(255),
+  email: emailRule,
   password: z.string().min(1, "Enter your password"),
 });
 
@@ -63,9 +65,9 @@ function Login() {
 
   async function sendReset(e: React.FormEvent) {
     e.preventDefault();
-    const parsed = z.string().trim().email().safeParse(resetEmail);
+    const parsed = emailRule.safeParse(resetEmail);
     if (!parsed.success) {
-      toast.error("Enter a valid email");
+      toast.error(parsed.error.issues[0]?.message ?? "Enter a valid email");
       return;
     }
     const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
@@ -80,10 +82,10 @@ function Login() {
 
   return (
     <AuthShell title="Welcome back" subtitle="Log in to continue your learning journey.">
-      <form onSubmit={onSubmit} className="space-y-5">
+      <form onSubmit={onSubmit} noValidate className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11" placeholder="you@example.com" />
+          <Input id="email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11" placeholder="you@example.com" />
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -92,7 +94,7 @@ function Login() {
               Forgot password?
             </button>
           </div>
-          <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-11" />
+          <PasswordInput id="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-11" />
         </div>
         <Button type="submit" variant="emerald" size="lg" className="w-full" disabled={busy}>
           {busy && <Loader2 className="animate-spin" />} Login
@@ -108,8 +110,8 @@ function Login() {
             <DialogTitle>Reset your password</DialogTitle>
             <DialogDescription>We'll email you a link to choose a new password.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={sendReset} className="space-y-4">
-            <Input type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} placeholder="you@example.com" />
+          <form onSubmit={sendReset} noValidate className="space-y-4">
+            <Input type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} placeholder="you@example.com" />
             <Button type="submit" variant="emerald" className="w-full">Send reset link</Button>
           </form>
         </DialogContent>
