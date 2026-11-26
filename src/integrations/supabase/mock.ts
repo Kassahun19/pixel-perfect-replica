@@ -897,8 +897,54 @@ export function createMockSupabaseClient(): SupabaseClient<Database> {
     },
   };
 
+  const storageBuckets = new Map<string, Map<string, Blob>>();
+
+  const storage = {
+    from(bucket: string) {
+      if (!storageBuckets.has(bucket)) storageBuckets.set(bucket, new Map());
+      const files = storageBuckets.get(bucket)!;
+      return {
+        async upload(path: string, file: Blob) {
+          files.set(path, file);
+          return { data: { path }, error: null };
+        },
+        async remove(paths: string[]) {
+          for (const p of paths) files.delete(p);
+          return { data: [], error: null };
+        },
+        async download(path: string) {
+          const blob = files.get(path) ?? null;
+          if (!blob) return { data: null, error: { message: "Object not found" } };
+          return { data: blob, error: null };
+        },
+        async createSignedUrl(path: string) {
+          const blob = files.get(path);
+          if (blob && typeof URL !== "undefined" && typeof URL.createObjectURL === "function") {
+            return { data: { signedUrl: URL.createObjectURL(blob) }, error: null };
+          }
+          return { data: null, error: { message: "Signed URL unavailable in local mock mode" } };
+        },
+      };
+    },
+  };
+
+  async function rpc(fn: string, params?: Record<string, unknown>) {
+    if (fn === "is_staff" || fn === "has_role") {
+      const uid = params?.["_user_id"];
+      const targetRole = params?.["_role"];
+      const roles = (tables["user_roles"] ?? []).filter((r) => r["user_id"] === uid).map((r) => r["role"]);
+      if (fn === "is_staff") {
+        return { data: roles.includes("owner") || roles.includes("admin"), error: null };
+      }
+      return { data: roles.includes(targetRole), error: null };
+    }
+    return { data: null, error: null };
+  }
+
   return {
     auth,
+    storage,
+    rpc,
     from(table: string) {
       return new MockQueryBuilder(table);
     },
