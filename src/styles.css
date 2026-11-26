@@ -237,3 +237,11 @@
     box-shadow: var(--shadow-elegant);
   }
 }
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+}
+

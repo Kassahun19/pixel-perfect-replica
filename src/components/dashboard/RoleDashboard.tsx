@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   Activity, Archive, ArrowDownToLine, ArrowRight, BadgeCheck, BookOpen, BookOpenCheck,
   Check, CircleDollarSign, ClipboardList, GraduationCap, LayoutDashboard, Loader2, Mail, PlayCircle,
-  Megaphone, MessageSquare, Plus, Search, Settings, Shield, Sparkles, UserRound, Users, Wallet, X,
+  Megaphone, MessageSquare, Plus, RefreshCw, Search, Settings, Shield, Sparkles, Trash2, UserRound, Users, Wallet, X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, displayName, type AppRole } from "@/lib/auth";
@@ -14,6 +14,14 @@ import { downloadCsv } from "@/lib/csv";
 import { FREE_LESSON_LIMIT, formatETB } from "@/lib/access";
 import { courseCoverUrl, courseImageUrl, fallbackCourseToken } from "@/lib/course-image";
 import { dataUrlToFile, streamImage } from "@/lib/stream-image";
+import {
+  fetchYouTubeChannelVideos,
+  fetchYouTubeVideoDetails,
+  formatVideoDuration,
+  getYouTubeId,
+  replaceChannelBranding,
+  type YouTubeChannelVideo,
+} from "@/lib/youtube";
 import { cn } from "@/lib/utils";
 import { CourseThumbnail } from "@/components/site/CourseThumbnail";
 import { Button } from "@/components/ui/button";
@@ -22,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmButton, EmptyState, ErrorBlock, LoadingBlock, PageHeader, Panel, StatCard } from "@/components/dashboard/ui";
+import { OwnerDashboard } from "./owner/OwnerDashboard";
 
 type Profile = Tables<"profiles">;
 type UserRole = Tables<"user_roles">;
@@ -200,6 +209,20 @@ export function RoleDashboard() {
   const qc = useQueryClient();
   const role = (pickedRole && roles.includes(pickedRole) ? pickedRole : primaryRole) ?? "student";
   const staff = role === "owner" || role === "admin";
+
+  if (staff) {
+    return (
+      <OwnerDashboard
+        role={role}
+        roles={roles}
+        onSwitchRole={(nextRole) => {
+          setPickedRole(nextRole);
+          setSection("overview");
+        }}
+      />
+    );
+  }
+
   const sections = sectionsFor(role);
   const currentSection = sections.some((s) => s.id === section) || section === "account" ? section : "overview";
 
@@ -227,7 +250,10 @@ export function RoleDashboard() {
   }, [data.lessons]);
 
   async function refresh(success?: string) {
-    await qc.invalidateQueries({ queryKey: ["role-dashboard"] });
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["role-dashboard"] }),
+      qc.invalidateQueries({ queryKey: ["public"] }),
+    ]);
     if (success) toast.success(success);
   }
 
@@ -273,8 +299,11 @@ export function RoleDashboard() {
     if (youtubeVideos.length && savedCourseId) {
       const lessonStart = (lessonsByCourse.get(savedCourseId) ?? []).reduce((max, lesson) => Math.max(max, lesson.position), 0);
       const lessonRows = youtubeVideos.map((video, index) => ({
-        course_id: savedCourseId, title: video.title, description: video.description || null,
-        position: lessonStart + index + 1, duration_minutes: 10,
+        course_id: savedCourseId,
+        title: replaceChannelBranding(video.title),
+        description: video.description ? replaceChannelBranding(video.description) : null,
+        position: lessonStart + index + 1,
+        duration_minutes: video.durationMinutes,
       }));
       const createdLessons = await supabase.from("lessons").insert(lessonRows).select("id,position");
       if (createdLessons.error) { setBusy(false); toast.error(`Course saved, but YouTube lessons could not be added: ${createdLessons.error.message}`); return; }
@@ -381,6 +410,22 @@ export function RoleDashboard() {
     if (error) toast.error(error.message); else await refresh("Course archived");
   }
 
+  async function deleteCourse(course: Course) {
+    if (!staff) return;
+    setBusy(true);
+    const { error } = await supabase.from("courses").delete().eq("id", course.id);
+    setBusy(false);
+    if (error) toast.error(error.message); else await refresh(`Permanently deleted "${course.title}"`);
+  }
+
+  async function deleteOtherCourses(ids: string[]) {
+    if (!staff || !ids.length) return;
+    setBusy(true);
+    const { error } = await supabase.from("courses").delete().in("id", ids);
+    setBusy(false);
+    if (error) toast.error(error.message); else await refresh("Removed all other courses permanently");
+  }
+
   const enrollmentFor = (userId: string, courseId: string) => data.enrollments.some((e) => e.user_id === userId && e.course_id === courseId);
   const courseLearnerCount = (courseId: string) => new Set(data.enrollments.filter((e) => e.course_id === courseId).map((e) => e.user_id)).size;
 
@@ -418,7 +463,7 @@ export function RoleDashboard() {
       <main className="min-w-0">
         {currentSection === "overview" && <Overview role={role} data={data} profile={profile} coursesById={coursesById} lessonsByCourse={lessonsByCourse} selectedChildId={selectedChildId} onSelectChild={setSelectedChild} onNavigateSection={setSection} />}
         {currentSection === "people" && staff && <PeopleSection data={data} rolesByUser={rolesByUser} role={role} currentUserId={user?.id ?? ""} search={search} setSearch={setSearch} busy={busy} onStatus={updateProfileStatus} onRole={changeUserRole} />}
-        {currentSection === "courses" && <CoursesSection role={role} data={data} userId={user?.id ?? ""} search={search} setSearch={setSearch} onAdd={() => { setEditingCourse(null); setCourseDialog(true); }} onEdit={(course) => { setEditingCourse(course); setCourseDialog(true); }} onArchive={archiveCourse} onEnroll={enroll} busy={busy} enrollmentFor={enrollmentFor} learnerCount={courseLearnerCount} />}
+        {currentSection === "courses" && <CoursesSection role={role} data={data} userId={user?.id ?? ""} search={search} setSearch={setSearch} onAdd={() => { setEditingCourse(null); setCourseDialog(true); }} onEdit={(course) => { setEditingCourse(course); setCourseDialog(true); }} onArchive={archiveCourse} onDelete={deleteCourse} onDeleteOthers={deleteOtherCourses} onEnroll={enroll} busy={busy} enrollmentFor={enrollmentFor} learnerCount={courseLearnerCount} />}
         {currentSection === "learners" && role === "instructor" && <LearnersSection data={data} coursesById={coursesById} search={search} setSearch={setSearch} />}
         {currentSection === "children" && role === "parent" && <ChildrenSection data={data} selectedChildId={selectedChildId} selectedChildProfile={selectedChildProfile} setSelectedChild={setSelectedChild} coursesById={coursesById} lessonsByCourse={lessonsByCourse} />}
         {currentSection === "learning" && (role === "student" || role === "parent") && <LearningSection role={role} data={data} userId={user?.id ?? ""} childId={role === "parent" ? selectedChildId : undefined} selectedChildProfile={selectedChildProfile} coursesById={coursesById} lessonsByCourse={lessonsByCourse} enrolled={enrollmentFor} onEnroll={enroll} busy={busy} />}
@@ -431,7 +476,18 @@ export function RoleDashboard() {
         {currentSection === "account" && <AccountSection profile={profile} />}
       </main>
 
-      <CourseEditor open={courseDialog} course={editingCourse} role={role} userId={user?.id ?? ""} instructors={data.profiles.filter((p) => (rolesByUser.get(p.id) ?? []).some((r) => r.role === "instructor"))} busy={busy} onOpenChange={setCourseDialog} onSave={saveCourse} />
+      <CourseEditor
+        open={courseDialog}
+        course={editingCourse}
+        existingLessons={editingCourse ? (lessonsByCourse.get(editingCourse.id) ?? []) : []}
+        role={role}
+        userId={user?.id ?? ""}
+        instructors={data.profiles.filter((p) => (rolesByUser.get(p.id) ?? []).some((r) => r.role === "instructor"))}
+        busy={busy}
+        onOpenChange={setCourseDialog}
+        onSave={saveCourse}
+        onSynced={refresh}
+      />
     </div>
   );
 }
@@ -582,16 +638,37 @@ function PeopleSection({ data, rolesByUser, role, currentUserId, search, setSear
   </>;
 }
 
-function CoursesSection({ role, data, userId, search, setSearch, onAdd, onEdit, onArchive, onEnroll, busy, enrollmentFor, learnerCount }: {
+function isPrimaryBasicComputerCourse(course: Course) {
+  return course.slug === "basic-computer-skills" || course.title.trim().toLowerCase() === "basic computer skills";
+}
+
+function CoursesSection({ role, data, userId, search, setSearch, onAdd, onEdit, onArchive, onDelete, onDeleteOthers, onEnroll, busy, enrollmentFor, learnerCount }: {
   role: AppRole; data: DashboardData; userId: string; search: string; setSearch: (s: string) => void; onAdd: () => void;
-  onEdit: (course: Course) => void; onArchive: (course: Course) => Promise<void>; onEnroll: (course: Course) => Promise<void>;
+  onEdit: (course: Course) => void; onArchive: (course: Course) => Promise<void>; onDelete: (course: Course) => Promise<void>;
+  onDeleteOthers: (ids: string[]) => Promise<void>; onEnroll: (course: Course) => Promise<void>;
   busy: boolean; enrollmentFor: (userId: string, courseId: string) => boolean; learnerCount: (courseId: string) => number;
 }) {
   const staff = role === "owner" || role === "admin";
   const editable = staff || role === "instructor";
   const courses = data.courses.filter((c) => `${c.title} ${c.short_description} ${c.level}`.toLowerCase().includes(search.toLowerCase()));
+  const otherCourseIds = data.courses.filter((c) => !isPrimaryBasicComputerCourse(c)).map((c) => c.id);
   return <>
-    <PageHeader title={role === "instructor" ? "My courses" : staff ? "Course management" : "Explore courses"} description={staff ? "Create and update the live course catalog." : role === "instructor" ? "Manage your assigned courses and see current enrollment." : "Choose a course, enroll, and continue learning."} actions={editable ? <Button variant="emerald" onClick={onAdd}><Plus /> New course</Button> : undefined} />
+    <PageHeader
+      title={role === "instructor" ? "My courses" : staff ? "Course management" : "Explore courses"}
+      description={staff ? "Create and update the live course catalog." : role === "instructor" ? "Manage your assigned courses and see current enrollment." : "Choose a course, enroll, and continue learning."}
+      actions={editable ? <div className="flex flex-wrap gap-2">
+        {staff && otherCourseIds.length > 0 && (
+          <ConfirmButton
+            trigger={<Button variant="outline" className="text-destructive" disabled={busy}><Trash2 className="h-4 w-4" /> Remove other courses ({otherCourseIds.length})</Button>}
+            title="Permanently remove all other courses?"
+            description="Only Basic Computer Skills will remain. All other courses and their lessons will be permanently deleted."
+            confirmLabel="Remove all other courses"
+            onConfirm={() => void onDeleteOthers(otherCourseIds)}
+          />
+        )}
+        <Button variant="emerald" onClick={onAdd}><Plus /> New course</Button>
+      </div> : undefined}
+    />
     <div className="mb-4 flex justify-end"><SearchBox value={search} onChange={setSearch} placeholder="Find a course" /></div>
     {courses.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{courses.map((course) => {
       const enrolled = userId ? enrollmentFor(userId, course.id) : false;
@@ -600,7 +677,8 @@ function CoursesSection({ role, data, userId, search, setSearch, onAdd, onEdit, 
         <div className="p-5"><div className="mb-2 flex items-start justify-between gap-2"><h2 className="font-semibold leading-snug">{course.title}</h2><Badge variant={course.status === "published" ? "success" : course.status === "archived" ? "muted" : "gold"}>{course.status}</Badge></div><p className="min-h-10 line-clamp-2 text-sm text-muted-foreground">{course.short_description}</p><div className="mt-4 flex items-center justify-between text-xs text-muted-foreground"><span>{course.level} · {course.duration_hours} hours</span>{role !== "student" && <span>{learnerCount(course.id)} learners</span>}</div>
           <div className="mt-4 flex flex-wrap gap-2">{role === "student" && course.status === "published" && <>{enrolled ? <Button asChild size="sm" variant="emerald"><Link to="/dashboard/learn/$slug" params={{ slug: course.slug }}>Continue learning <ArrowRight /></Link></Button> : <Button size="sm" variant="emerald" disabled={busy} onClick={() => void onEnroll(course)}>Enroll</Button>}<Button asChild size="sm" variant="outline"><Link to="/dashboard/learn/$slug" params={{ slug: course.slug }}>Preview</Link></Button></>}
             {editable && <Button size="sm" variant="outline" onClick={() => onEdit(course)}>Edit</Button>}
-            {staff && course.status !== "archived" && <ConfirmButton trigger={<Button size="sm" variant="outline" className="text-destructive"><Archive className="h-4 w-4" /> Archive</Button>} title="Archive this course?" description="It will no longer appear in the public catalog. Existing course and payment records remain in place." confirmLabel="Archive course" onConfirm={() => void onArchive(course)} />}
+            {staff && course.status !== "archived" && <ConfirmButton trigger={<Button size="sm" variant="outline" disabled={busy}><Archive className="h-4 w-4" /> Archive</Button>} title="Archive this course?" description="It will no longer appear in the public catalog. Existing course and payment records remain in place." confirmLabel="Archive course" onConfirm={() => void onArchive(course)} />}
+            {staff && <ConfirmButton trigger={<Button size="sm" variant="outline" className="text-destructive" disabled={busy}><Trash2 className="h-4 w-4" /> Delete</Button>} title={`Permanently delete "${course.title}"?`} description="This permanently removes the course, its lessons, and related course records from the database." confirmLabel="Delete permanently" onConfirm={() => void onDelete(course)} />}
           </div>
         </div>
       </article>;
@@ -608,18 +686,21 @@ function CoursesSection({ role, data, userId, search, setSearch, onAdd, onEdit, 
   </>;
 }
 
-type YoutubeVideo = { id: string; title: string; description: string };
+type YoutubeVideo = YouTubeChannelVideo;
 type CourseFormValues = { title: string; slug: string; short_description: string; description: string; image_url: string; coverFile: File | null; generatedCoverFile: File | null; level: string; duration_hours: string; status: Course["status"]; instructor_id: string; youtubeApiKey: string; youtubeChannelId: string };
 
-function CourseEditor({ open, course, role, userId, instructors, busy, onOpenChange, onSave }: {
-  open: boolean; course: Course | null; role: AppRole; userId: string; instructors: Profile[]; busy: boolean;
+function CourseEditor({ open, course, existingLessons, role, userId, instructors, busy, onOpenChange, onSave, onSynced }: {
+  open: boolean; course: Course | null; existingLessons: Lesson[]; role: AppRole; userId: string; instructors: Profile[]; busy: boolean;
   onOpenChange: (value: boolean) => void; onSave: (values: CourseFormValues, course?: Course, videos?: YoutubeVideo[]) => Promise<void>;
+  onSynced: (message?: string) => Promise<void>;
 }) {
   const [values, setValues] = useState<CourseFormValues>(blankCourse);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [youtubeVideos, setYoutubeVideos] = useState<YoutubeVideo[]>([]);
   const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
   const [loadingYoutube, setLoadingYoutube] = useState(false);
+  const [syncingDurations, setSyncingDurations] = useState(false);
+  const [autoDurationHours, setAutoDurationHours] = useState(false);
   const [coverPreview, setCoverPreview] = useState<string | undefined>();
   const [generatedPreview, setGeneratedPreview] = useState<string | undefined>();
   const [generatingThumbnail, setGeneratingThumbnail] = useState(false);
@@ -630,6 +711,7 @@ function CourseEditor({ open, course, role, userId, instructors, busy, onOpenCha
     setValues(course ? { title: course.title, slug: course.slug, short_description: course.short_description, description: course.description, image_url: course.image_url ?? "", coverFile: null, generatedCoverFile: null, level: course.level, duration_hours: String(course.duration_hours), status: course.status, instructor_id: course.instructor_id ?? "", youtubeApiKey: "", youtubeChannelId: "" } : blankCourse);
     setYoutubeVideos([]);
     setSelectedVideoIds([]);
+    setAutoDurationHours(!course || course.duration_hours === 0);
     setGeneratedPreview(undefined);
     setGeneratingThumbnail(false);
     setThumbnailPartial(false);
@@ -710,17 +792,119 @@ function CourseEditor({ open, course, role, userId, instructors, busy, onOpenCha
     if (!values.youtubeApiKey.trim() || !values.youtubeChannelId.trim()) { toast.error("Enter a YouTube API key and Channel ID"); return; }
     setLoadingYoutube(true);
     try {
-      const params = new URLSearchParams({ part: "snippet", channelId: values.youtubeChannelId.trim(), type: "video", maxResults: "50", key: values.youtubeApiKey.trim() });
-      const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
-      const payload = await response.json() as { items?: { id?: { videoId?: string }; snippet?: { title?: string; description?: string } }[]; error?: { message?: string } };
-      if (!response.ok) throw new Error(payload.error?.message ?? "YouTube could not load this channel");
-      const videos = (payload.items ?? []).flatMap((item) => item.id?.videoId ? [{ id: item.id.videoId, title: item.snippet?.title ?? "YouTube lesson", description: item.snippet?.description ?? "" }] : []);
+      const videos = await fetchYouTubeChannelVideos(values.youtubeApiKey, values.youtubeChannelId);
       setYoutubeVideos(videos);
-      setSelectedVideoIds(videos.map((video) => video.id));
-      if (!videos.length) toast.error("No public videos were found for this channel");
+      const nextSelected = videos.map((video) => video.id);
+      setSelectedVideoIds(nextSelected);
+      if (!videos.length) {
+        toast.error("No public videos were found for this channel");
+      } else {
+        const selectedSeconds = videos.reduce((sum, v) => sum + v.durationSeconds, 0);
+        const existingMinutes = existingLessons.reduce((sum, l) => sum + l.duration_minutes, 0);
+        const totalMinutes = existingMinutes + Math.round(selectedSeconds / 60);
+        if (autoDurationHours && totalMinutes > 0) {
+          set("duration_hours", String(Math.max(1, Math.round(totalMinutes / 60))));
+        }
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not load YouTube videos");
     } finally { setLoadingYoutube(false); }
+  }
+  async function syncExistingLessonDurations() {
+    if (!course || !existingLessons.length) return;
+    setSyncingDurations(true);
+    try {
+      const apiKey = values.youtubeApiKey.trim();
+      let updatedCount = 0;
+
+      if (!apiKey) {
+        for (const lesson of existingLessons) {
+          const nextTitle = replaceChannelBranding(lesson.title);
+          const nextDescription = lesson.description ? replaceChannelBranding(lesson.description) : null;
+          if (nextTitle !== lesson.title || nextDescription !== lesson.description) {
+            const { error: upErr } = await supabase
+              .from("lessons")
+              .update({ title: nextTitle, description: nextDescription })
+              .eq("id", lesson.id);
+            if (upErr) throw new Error(upErr.message);
+            updatedCount += 1;
+          }
+        }
+        await onSynced(
+          updatedCount > 0
+            ? `Updated branding to Ezana Academy on ${updatedCount} lesson${updatedCount === 1 ? "" : "s"}. Add a YouTube API key to also sync video lengths.`
+            : "Lesson titles already use Ezana Academy branding. Add a YouTube API key to sync video lengths.",
+        );
+        return;
+      }
+
+      const lessonIds = existingLessons.map((l) => l.id);
+      const { data: mediaRows, error: mediaErr } = await supabase
+        .from("lesson_media")
+        .select("lesson_id,video_url")
+        .in("lesson_id", lessonIds);
+      if (mediaErr) throw new Error(mediaErr.message);
+
+      const videoIdByLesson = new Map<string, string>();
+      for (const row of mediaRows ?? []) {
+        const ytId = getYouTubeId(row.video_url);
+        if (ytId) videoIdByLesson.set(row.lesson_id, ytId);
+      }
+      const ytIds = [...videoIdByLesson.values()];
+      if (!ytIds.length) {
+        toast.error("No YouTube lessons were found in this course");
+        return;
+      }
+
+      const detailsById = await fetchYouTubeVideoDetails(apiKey, ytIds);
+      let totalMinutes = 0;
+
+      for (const lesson of existingLessons) {
+        const ytId = videoIdByLesson.get(lesson.id);
+        const detail = ytId ? detailsById.get(ytId) : undefined;
+        if (detail) {
+          const nextMinutes = detail.durationMinutes > 0 ? detail.durationMinutes : lesson.duration_minutes;
+          const nextTitle = detail.title || replaceChannelBranding(lesson.title);
+          const nextDescription = detail.description || (lesson.description ? replaceChannelBranding(lesson.description) : null);
+          totalMinutes += nextMinutes;
+          if (
+            lesson.duration_minutes !== nextMinutes ||
+            lesson.title !== nextTitle ||
+            lesson.description !== nextDescription
+          ) {
+            const { error: upErr } = await supabase
+              .from("lessons")
+              .update({
+                duration_minutes: nextMinutes,
+                title: nextTitle,
+                description: nextDescription,
+              })
+              .eq("id", lesson.id);
+            if (upErr) throw new Error(upErr.message);
+            updatedCount += 1;
+          }
+        } else {
+          totalMinutes += lesson.duration_minutes;
+        }
+      }
+
+      const nextHours = totalMinutes > 0 ? Math.max(1, Math.round(totalMinutes / 60)) : course.duration_hours;
+      if (nextHours !== course.duration_hours) {
+        const { error: courseErr } = await supabase.from("courses").update({ duration_hours: nextHours }).eq("id", course.id);
+        if (courseErr) throw new Error(courseErr.message);
+        set("duration_hours", String(nextHours));
+      }
+
+      await onSynced(
+        updatedCount > 0
+          ? `Synced Ezana Academy titles & dynamic durations for ${updatedCount} lesson${updatedCount === 1 ? "" : "s"}`
+          : "All YouTube lesson titles and durations are already up to date",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not sync YouTube lessons");
+    } finally {
+      setSyncingDurations(false);
+    }
   }
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>{course ? "Edit course" : "Create a course"}</DialogTitle><DialogDescription>Course data is saved to the academy catalog.</DialogDescription></DialogHeader>
     <form className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void handleSubmit(e)}>
@@ -806,18 +990,65 @@ function CourseEditor({ open, course, role, userId, instructors, busy, onOpenCha
         )}
       </div>
       <label className="space-y-1.5 text-sm font-medium">Level<select value={values.level} onChange={(e) => set("level", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3"><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select></label>
-      <label className="space-y-1.5 text-sm font-medium">Duration (hours)<Input type="number" min="0" value={values.duration_hours} onChange={(e) => set("duration_hours", e.target.value)} /></label>
+      <label className="space-y-1.5 text-sm font-medium">Duration (hours)<Input type="number" min="0" value={values.duration_hours} onChange={(e) => { setAutoDurationHours(false); set("duration_hours", e.target.value); }} /></label>
       <label className="space-y-1.5 text-sm font-medium">Publication status<select value={values.status} onChange={(e) => set("status", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3"><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
       {(role === "owner" || role === "admin") && <label className="space-y-1.5 text-sm font-medium sm:col-span-2">Assign instructor<select value={values.instructor_id} onChange={(e) => set("instructor_id", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3"><option value="">Unassigned</option>{instructors.map((p) => <option key={p.id} value={p.id}>{displayName(p)}</option>)}</select></label>}
       {role === "instructor" && <p className="text-xs text-muted-foreground sm:col-span-2">This course will be assigned to your instructor account ({userId.slice(0, 8)}…).</p>}
       <section className="space-y-3 rounded-xl border border-border bg-secondary/30 p-4 sm:col-span-2">
-        <div><h3 className="font-semibold">Import lessons from a YouTube channel</h3><p className="text-xs text-muted-foreground">The API key is used only for this request and is not saved. Channel names are not shown to learners.</p></div>
+        <div><h3 className="font-semibold">Import lessons from a YouTube channel</h3><p className="text-xs text-muted-foreground">The API key is used only for this request and is not saved. Exact video lengths are fetched dynamically from YouTube.</p></div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1.5 text-sm font-medium">YouTube API key<Input type="password" autoComplete="off" value={values.youtubeApiKey} onChange={(e) => set("youtubeApiKey", e.target.value)} /></label>
           <label className="space-y-1.5 text-sm font-medium">YouTube Channel ID<Input value={values.youtubeChannelId} onChange={(e) => set("youtubeChannelId", e.target.value)} placeholder="UC…" /></label>
         </div>
-        <Button type="button" variant="outline" disabled={loadingYoutube} onClick={() => void loadYoutubeVideos()}>{loadingYoutube ? <Loader2 className="animate-spin" /> : <PlayCircle />} Load channel videos</Button>
-        {youtubeVideos.length > 0 && <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border bg-background p-3">{youtubeVideos.map((video) => <label key={video.id} className="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" checked={selectedVideoIds.includes(video.id)} onChange={(e) => setSelectedVideoIds((ids) => e.target.checked ? [...ids, video.id] : ids.filter((id) => id !== video.id))} /><span className="line-clamp-2">{video.title}</span></label>)}</div>}
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" disabled={loadingYoutube || syncingDurations} onClick={() => void loadYoutubeVideos()}>{loadingYoutube ? <Loader2 className="animate-spin" /> : <PlayCircle />} Load channel videos</Button>
+          {course && existingLessons.length > 0 && (
+            <Button type="button" variant="outline" disabled={loadingYoutube || syncingDurations} onClick={() => void syncExistingLessonDurations()}>
+              {syncingDurations ? <Loader2 className="animate-spin" /> : <RefreshCw />} Sync titles &amp; durations
+            </Button>
+          )}
+        </div>
+        {youtubeVideos.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              {selectedVideoIds.length} of {youtubeVideos.length} selected · Total length:{" "}
+              {formatVideoDuration(
+                youtubeVideos
+                  .filter((v) => selectedVideoIds.includes(v.id))
+                  .reduce((sum, v) => sum + v.durationSeconds, 0),
+              )}
+            </p>
+            <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border bg-background p-3">
+              {youtubeVideos.map((video) => (
+                <label key={video.id} className="flex cursor-pointer items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={selectedVideoIds.includes(video.id)}
+                    onChange={(e) => {
+                      const nextSelected = e.target.checked
+                        ? [...selectedVideoIds, video.id]
+                        : selectedVideoIds.filter((id) => id !== video.id);
+                      setSelectedVideoIds(nextSelected);
+                      if (autoDurationHours) {
+                        const selectedSeconds = youtubeVideos
+                          .filter((v) => nextSelected.includes(v.id))
+                          .reduce((sum, v) => sum + v.durationSeconds, 0);
+                        const existingMinutes = existingLessons.reduce((sum, l) => sum + l.duration_minutes, 0);
+                        const totalMinutes = existingMinutes + Math.round(selectedSeconds / 60);
+                        set("duration_hours", totalMinutes > 0 ? String(Math.max(1, Math.round(totalMinutes / 60))) : "0");
+                      }
+                    }}
+                  />
+                  <span className="line-clamp-2 flex-1">{video.title}</span>
+                  <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+                    {video.durationSeconds > 0 ? formatVideoDuration(video.durationSeconds) : `${video.durationMinutes} min`}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
       <DialogFooter className="sm:col-span-2"><Button type="button" variant="outline" disabled={busy || generatingThumbnail} onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" variant="emerald" disabled={busy || generatingThumbnail}>{generatingThumbnail ? "Generating thumbnail…" : busy ? "Saving…" : "Save course"}</Button></DialogFooter>
     </form>

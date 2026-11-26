@@ -1,7 +1,12 @@
 import { createParser } from "eventsource-parser";
 import { flushSync } from "react-dom";
 
-type ImagePayload = { type?: string; b64_json?: string; error?: { message?: string } };
+type ImagePayload = {
+  type?: string;
+  b64_json?: string;
+  mime_type?: string;
+  error?: { message?: string };
+};
 
 export async function streamImage(
   endpoint: string,
@@ -27,7 +32,12 @@ export async function streamImage(
       body = JSON.stringify(payload);
       requestHeaders.set("Content-Type", "application/json");
     }
-    return fetch(endpoint, { method: "POST", headers: requestHeaders, body, signal: signal ?? null });
+    return fetch(endpoint, {
+      method: "POST",
+      headers: requestHeaders,
+      body,
+      signal: signal ?? null,
+    });
   };
   const res = await send(true);
   if (!res.ok || !res.body) {
@@ -64,7 +74,8 @@ export async function streamImage(
         streamError = "Image event contained no image";
         return;
       }
-      const dataUrl = `data:image/png;base64,${payload.b64_json}`;
+      const mimeType = payload.mime_type || "image/png";
+      const dataUrl = `data:${mimeType};base64,${payload.b64_json}`;
       const isFinal = type === "image_generation.completed" || type === "image_edit.completed";
       // React batches callbacks from coalesced SSE events unless each frame is committed here.
       flushSync(() => onFrame(dataUrl, isFinal));
@@ -81,7 +92,12 @@ export async function streamImage(
       try {
         chunk = await reader.read();
       } catch (error) {
-        if (signal?.aborted || sawAnyEvent || (error instanceof Error && error.name === "AbortError")) throw error;
+        if (
+          signal?.aborted ||
+          sawAnyEvent ||
+          (error instanceof Error && error.name === "AbortError")
+        )
+          throw error;
         break;
       }
       if (chunk.done) break;
@@ -95,16 +111,21 @@ export async function streamImage(
   if (!sawAnyEvent) {
     const replay = await send(false);
     if (!replay.ok) {
-      throw new Error(`Image generation failed: ${replay.status} ${await replay.text().catch(() => "")}`);
+      throw new Error(
+        `Image generation failed: ${replay.status} ${await replay.text().catch(() => "")}`,
+      );
     }
-    const json = (await replay.json()) as { data?: { b64_json?: string }[] };
-    const b64 = json.data?.[0]?.b64_json;
+    const json = (await replay.json()) as { data?: { b64_json?: string; mime_type?: string }[] };
+    const first = json.data?.[0];
+    const b64 = first?.b64_json;
     if (!b64) throw new Error("Image generation returned no image");
-    const dataUrl = `data:image/png;base64,${b64}`;
+    const mimeType = first?.mime_type || "image/png";
+    const dataUrl = `data:${mimeType};base64,${b64}`;
     onFrame(dataUrl, true);
     return dataUrl;
   }
-  if (!sawCompleted || !finalDataUrl) throw new Error("Image stream ended without a completed event");
+  if (!sawCompleted || !finalDataUrl)
+    throw new Error("Image stream ended without a completed event");
   return finalDataUrl;
 }
 

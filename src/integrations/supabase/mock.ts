@@ -67,192 +67,40 @@ const SEED_CATEGORIES = [
 const SEED_COURSES = [
   {
     id: "22222222-2222-4222-8222-222222222201",
-    title: "Full-Stack Web Development",
-    slug: "full-stack-web-development",
-    short_description: "Build modern websites and web apps from scratch.",
+    title: "Basic Computer Skills",
+    slug: "basic-computer-skills",
+    short_description:
+      "Master essential computer, Windows, Word, Excel, and internet skills for school and work.",
     description:
-      "Go from zero to job-ready. Learn HTML, CSS, JavaScript, React and backend fundamentals by building real projects for Ethiopian businesses.",
+      "Build practical everyday computer literacy from scratch. Learn Windows basics, Microsoft Word, Excel spreadsheets, PowerPoint, and safe productivity tools step by step.",
     image_url: "/__l5e/assets-v1/2e71e2fe-b00b-498a-a344-0d3e02eb7786/ezana-web.jpg",
     category_id: "11111111-1111-4111-8111-111111111101",
     instructor_id: null,
     level: "Beginner",
-    duration_hours: 42,
+    duration_hours: 4,
     objectives: [
-      "Build responsive websites with HTML & CSS",
-      "Write modern JavaScript",
-      "Create React applications",
-      "Connect apps to a database and API",
+      "Navigate Windows and manage files confidently",
+      "Create and format documents in Microsoft Word",
+      "Organize tables and formulas in Microsoft Excel",
+      "Use everyday productivity shortcuts and online tools safely",
     ],
     status: "published",
     created_at: "2026-11-19T18:18:52.001Z",
     updated_at: "2026-11-19T18:18:52.001Z",
   },
-  {
-    id: "22222222-2222-4222-8222-222222222202",
-    title: "Data Science & AI Foundations",
-    slug: "data-science-ai-foundations",
-    short_description: "Turn raw data into insight with Python and AI.",
-    description:
-      "Learn Python, data analysis, visualisation and the basics of machine learning, with datasets drawn from agriculture, health and finance.",
-    image_url: "/__l5e/assets-v1/b2d7a1ae-5c2d-4496-bb1c-9d458c5e6f47/ezana-data.jpg",
-    category_id: "11111111-1111-4111-8111-111111111102",
-    instructor_id: null,
-    level: "Intermediate",
-    duration_hours: 36,
-    objectives: [
-      "Analyse data with Python and pandas",
-      "Visualise insights clearly",
-      "Train your first machine learning model",
-      "Understand how modern AI works",
-    ],
-    status: "published",
-    created_at: "2026-11-19T18:18:52.002Z",
-    updated_at: "2026-11-19T18:18:52.002Z",
-  },
-  {
-    id: "22222222-2222-4222-8222-222222222203",
-    title: "UI/UX Design Masterclass",
-    slug: "ui-ux-design-masterclass",
-    short_description: "Design beautiful, usable apps people love.",
-    description:
-      "Master user research, wireframing, visual design and prototyping. Finish with a polished portfolio project.",
-    image_url: "/__l5e/assets-v1/854f79e5-1311-4cac-b83c-8a161c3b1a7a/ezana-design.jpg",
-    category_id: "11111111-1111-4111-8111-111111111103",
-    instructor_id: null,
-    level: "Beginner",
-    duration_hours: 28,
-    objectives: [
-      "Run simple user research",
-      "Wireframe and prototype apps",
-      "Apply colour, type and layout",
-      "Build a design portfolio piece",
-    ],
-    status: "published",
-    created_at: "2026-11-19T18:18:52.003Z",
-    updated_at: "2026-11-19T18:18:52.003Z",
-  },
-  {
-    id: "22222222-2222-4222-8222-222222222204",
-    title: "Mathematics for Grade 11 & 12",
-    slug: "mathematics-grade-11-12",
-    short_description: "Master the maths you need for the national exam.",
-    description:
-      "Clear, step-by-step lessons covering algebra, functions, trigonometry, calculus and statistics aligned with the Ethiopian curriculum.",
-    image_url: "/__l5e/assets-v1/d9840e76-0438-419a-8d3b-4ab42fd4d447/ezana-math.jpg",
-    category_id: "11111111-1111-4111-8111-111111111104",
-    instructor_id: null,
-    level: "Intermediate",
-    duration_hours: 40,
-    objectives: [
-      "Solve equations and inequalities with confidence",
-      "Understand functions and graphs",
-      "Learn the basics of calculus",
-      "Prepare effectively for the national exam",
-    ],
-    status: "published",
-    created_at: "2026-11-19T18:18:52.004Z",
-    updated_at: "2026-11-19T18:18:52.004Z",
-  },
-  {
-    id: "22222222-2222-4222-8222-222222222205",
-    title: "Entrepreneurship & Startup Growth",
-    slug: "entrepreneurship-startup-growth",
-    short_description: "Launch and grow a business in Ethiopia.",
-    description:
-      "From idea validation to marketing, finance and fundraising: practical lessons from founders building in Addis Ababa and beyond.",
-    image_url: "/__l5e/assets-v1/81a067f9-5b6b-49ce-97e1-1633f9cfeace/ezana-business.jpg",
-    category_id: "11111111-1111-4111-8111-111111111105",
-    instructor_id: null,
-    level: "Beginner",
-    duration_hours: 24,
-    objectives: [
-      "Validate a business idea",
-      "Write a lean business plan",
-      "Market on a small budget",
-      "Manage cash flow and pitch investors",
-    ],
-    status: "published",
-    created_at: "2026-11-19T18:18:52.005Z",
-    updated_at: "2026-11-19T18:18:52.005Z",
-  },
-  {
-    id: "22222222-2222-4222-8222-222222222206",
-    title: "Spoken English & Communication",
-    slug: "spoken-english-communication",
-    short_description: "Speak English fluently and confidently.",
-    description:
-      "Improve your speaking, listening, pronunciation and professional communication for interviews, school and work.",
-    image_url: "/__l5e/assets-v1/410eb273-3422-4cee-9b5b-9ec31110a94e/ezana-english.jpg",
-    category_id: "11111111-1111-4111-8111-111111111106",
-    instructor_id: null,
-    level: "Beginner",
-    duration_hours: 20,
-    objectives: [
-      "Speak with clearer pronunciation",
-      "Build everyday and professional vocabulary",
-      "Ace job interviews in English",
-      "Write clear emails and reports",
-    ],
-    status: "published",
-    created_at: "2026-11-19T18:18:52.006Z",
-    updated_at: "2026-11-19T18:18:52.006Z",
-  },
 ];
 
 const LESSON_SPECS: Array<[string, number, string, number]> = [
-  ["full-stack-web-development", 1, "Welcome & how the web works", 12],
-  ["full-stack-web-development", 2, "HTML fundamentals", 18],
-  ["full-stack-web-development", 3, "Styling with CSS", 22],
-  ["full-stack-web-development", 4, "Responsive layouts with Flexbox & Grid", 25],
-  ["full-stack-web-development", 5, "JavaScript basics", 28],
-  ["full-stack-web-development", 6, "DOM & events", 24],
-  ["full-stack-web-development", 7, "Introduction to React", 30],
-  ["full-stack-web-development", 8, "State, props & hooks", 32],
-  ["full-stack-web-development", 9, "REST APIs & JSON", 26],
-  ["full-stack-web-development", 10, "Deploying your project", 20],
-  ["data-science-ai-foundations", 1, "What is data science?", 10],
-  ["data-science-ai-foundations", 2, "Python crash course", 30],
-  ["data-science-ai-foundations", 3, "Working with pandas", 28],
-  ["data-science-ai-foundations", 4, "Cleaning messy data", 24],
-  ["data-science-ai-foundations", 5, "Data visualisation", 22],
-  ["data-science-ai-foundations", 6, "Statistics you need", 26],
-  ["data-science-ai-foundations", 7, "Your first ML model", 30],
-  ["data-science-ai-foundations", 8, "Evaluating models", 24],
-  ["data-science-ai-foundations", 9, "How AI language models work", 20],
-  ["ui-ux-design-masterclass", 1, "Design thinking", 14],
-  ["ui-ux-design-masterclass", 2, "User research basics", 20],
-  ["ui-ux-design-masterclass", 3, "Wireframing", 22],
-  ["ui-ux-design-masterclass", 4, "Colour & typography", 24],
-  ["ui-ux-design-masterclass", 5, "Layout & spacing", 20],
-  ["ui-ux-design-masterclass", 6, "Components & design systems", 26],
-  ["ui-ux-design-masterclass", 7, "Prototyping interactions", 22],
-  ["ui-ux-design-masterclass", 8, "Portfolio case study", 28],
-  ["mathematics-grade-11-12", 1, "Sets & number systems", 16],
-  ["mathematics-grade-11-12", 2, "Equations & inequalities", 22],
-  ["mathematics-grade-11-12", 3, "Functions & graphs", 24],
-  ["mathematics-grade-11-12", 4, "Exponents & logarithms", 22],
-  ["mathematics-grade-11-12", 5, "Trigonometry", 26],
-  ["mathematics-grade-11-12", 6, "Sequences & series", 20],
-  ["mathematics-grade-11-12", 7, "Limits & continuity", 24],
-  ["mathematics-grade-11-12", 8, "Derivatives", 28],
-  ["mathematics-grade-11-12", 9, "Integration basics", 28],
-  ["mathematics-grade-11-12", 10, "Statistics & probability", 24],
-  ["entrepreneurship-startup-growth", 1, "The founder mindset", 12],
-  ["entrepreneurship-startup-growth", 2, "Finding & validating ideas", 20],
-  ["entrepreneurship-startup-growth", 3, "The lean business plan", 22],
-  ["entrepreneurship-startup-growth", 4, "Registering a business in Ethiopia", 18],
-  ["entrepreneurship-startup-growth", 5, "Marketing on a budget", 24],
-  ["entrepreneurship-startup-growth", 6, "Sales that work", 20],
-  ["entrepreneurship-startup-growth", 7, "Cash flow & bookkeeping", 22],
-  ["entrepreneurship-startup-growth", 8, "Pitching to investors", 20],
-  ["spoken-english-communication", 1, "Building confidence", 10],
-  ["spoken-english-communication", 2, "Pronunciation essentials", 18],
-  ["spoken-english-communication", 3, "Everyday conversations", 20],
-  ["spoken-english-communication", 4, "Listening skills", 16],
-  ["spoken-english-communication", 5, "Grammar for speaking", 22],
-  ["spoken-english-communication", 6, "Presentations", 20],
-  ["spoken-english-communication", 7, "Job interviews", 24],
-  ["spoken-english-communication", 8, "Professional emails", 18],
+  ["basic-computer-skills", 1, "Getting started with your computer and desktop", 12],
+  ["basic-computer-skills", 2, "Managing files, folders, and USB drives", 15],
+  ["basic-computer-skills", 3, "Essential Windows keyboard shortcuts", 10],
+  ["basic-computer-skills", 4, "Creating and formatting documents in MS Word", 18],
+  ["basic-computer-skills", 5, "How to Create a Table in Excel (Microsoft Excel)", 14],
+  ["basic-computer-skills", 6, "Autofit columns and smart formulas in Excel", 16],
+  ["basic-computer-skills", 7, "Professional PowerPoint intro design", 20],
+  ["basic-computer-skills", 8, "Converting PDF to editable Word cleanly", 12],
+  ["basic-computer-skills", 9, "Email etiquette and safe internet browsing", 15],
+  ["basic-computer-skills", 10, "Hidden Windows productivity features", 18],
 ];
 
 const courseIdBySlug = new Map(SEED_COURSES.map((c) => [c.slug, c.id]));
@@ -378,7 +226,7 @@ const SEED_PAYMENTS: Row[] = [
   {
     id: "55555555-5555-4555-8555-555555555502",
     user_id: "99999999-9999-4999-8999-999999999902",
-    course_id: "22222222-2222-4222-8222-222222222202",
+    course_id: "22222222-2222-4222-8222-222222222201",
     amount: 218,
     currency: "ETB",
     method: "Bank transfer (CBE)",
@@ -394,12 +242,12 @@ const SEED_PAYMENTS: Row[] = [
   {
     id: "55555555-5555-4555-8555-555555555503",
     user_id: "99999999-9999-4999-8999-999999999903",
-    course_id: "22222222-2222-4222-8222-222222222204",
+    course_id: "22222222-2222-4222-8222-222222222201",
     amount: 218,
     currency: "ETB",
     method: "CBE Birr",
     reference: "CBB7741209",
-    note: "Grade 11 & 12 Maths full access",
+    note: "Basic Computer Skills full access",
     status: "approved",
     reviewed_by: null,
     reviewed_at: "2026-11-21T16:05:00Z",
@@ -469,16 +317,14 @@ function syncUserRow(u: StoredMockUser): void {
       updated_at: new Date().toISOString(),
     });
   }
-  const existingRole = tables["user_roles"]!.find((r) => r["user_id"] === u.id);
-  if (!existingRole) {
+  const hasAnyRole = tables["user_roles"]!.some((r) => r["user_id"] === u.id);
+  if (!hasAnyRole) {
     tables["user_roles"]!.push({
       id: crypto.randomUUID(),
       user_id: u.id,
       role: u.role,
       created_at: new Date().toISOString(),
     });
-  } else {
-    existingRole["role"] = u.role;
   }
 }
 
@@ -676,7 +522,10 @@ class MockQueryBuilder {
     return this;
   }
 
-  private async execute(): Promise<{ data: unknown; error: { message: string; code?: string } | null }> {
+  private async execute(): Promise<{
+    data: unknown;
+    error: { message: string; code?: string } | null;
+  }> {
     const list = tables[this.table] ?? [];
 
     if (this.op === "insert") {
@@ -796,7 +645,8 @@ class MockQueryBuilder {
   }
 
   then<TResult1 = { data: unknown; error: unknown }, TResult2 = never>(
-    onfulfilled?: ((value: { data: unknown; error: unknown }) => TResult1 | PromiseLike<TResult1>) | null,
+    onfulfilled?:
+      ((value: { data: unknown; error: unknown }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     return this.execute().then(onfulfilled, onrejected);
@@ -807,7 +657,9 @@ let warnedMock = false;
 export function warnMockOnce(context: string) {
   if (warnedMock) return;
   warnedMock = true;
-  console.warn(`[AI Studio] Supabase env vars not configured (${context}) — using in-memory mock data.`);
+  console.warn(
+    `[AI Studio] Supabase env vars not configured (${context}) — using in-memory mock data.`,
+  );
 }
 
 export function createMockSupabaseClient(): SupabaseClient<Database> {
@@ -819,11 +671,18 @@ export function createMockSupabaseClient(): SupabaseClient<Database> {
       const s = getCurrentSession();
       return { data: { user: s?.user ?? null }, error: null };
     },
-    async signUp(params: { email: string; password: string; options?: { data?: Record<string, string> } }) {
+    async signUp(params: {
+      email: string;
+      password: string;
+      options?: { data?: Record<string, string> };
+    }) {
       const email = params.email.trim().toLowerCase();
       const users = getStoredUsers();
       if (users.some((u) => u.email.toLowerCase() === email)) {
-        return { data: { user: null, session: null }, error: { message: "User already registered" } };
+        return {
+          data: { user: null, session: null },
+          error: { message: "User already registered" },
+        };
       }
       const user: StoredMockUser = {
         id: crypto.randomUUID(),
@@ -842,9 +701,14 @@ export function createMockSupabaseClient(): SupabaseClient<Database> {
     async signInWithPassword(params: { email: string; password: string }) {
       const email = params.email.trim().toLowerCase();
       const users = getStoredUsers();
-      const user = users.find((u) => u.email.toLowerCase() === email && u.password === params.password);
+      const user = users.find(
+        (u) => u.email.toLowerCase() === email && u.password === params.password,
+      );
       if (!user) {
-        return { data: { user: null, session: null }, error: { message: "Invalid login credentials" } };
+        return {
+          data: { user: null, session: null },
+          error: { message: "Invalid login credentials" },
+        };
       }
       const session = makeSession(user);
       setCurrentSession(session);
@@ -932,7 +796,9 @@ export function createMockSupabaseClient(): SupabaseClient<Database> {
     if (fn === "is_staff" || fn === "has_role") {
       const uid = params?.["_user_id"];
       const targetRole = params?.["_role"];
-      const roles = (tables["user_roles"] ?? []).filter((r) => r["user_id"] === uid).map((r) => r["role"]);
+      const roles = (tables["user_roles"] ?? [])
+        .filter((r) => r["user_id"] === uid)
+        .map((r) => r["role"]);
       if (fn === "is_staff") {
         return { data: roles.includes("owner") || roles.includes("admin"), error: null };
       }

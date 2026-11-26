@@ -66,12 +66,7 @@ type ProfileLite = {
 };
 
 const SEED_COURSE_TITLES: Record<string, string> = {
-  "22222222-2222-4222-8222-222222222201": "Full-Stack Web Development",
-  "22222222-2222-4222-8222-222222222202": "Data Science & AI Foundations",
-  "22222222-2222-4222-8222-222222222203": "UI/UX Design Masterclass",
-  "22222222-2222-4222-8222-222222222204": "Mathematics for Grade 11 & 12",
-  "22222222-2222-4222-8222-222222222205": "Entrepreneurship & Startup Growth",
-  "22222222-2222-4222-8222-222222222206": "Spoken English & Communication",
+  "22222222-2222-4222-8222-222222222201": "Basic Computer Skills",
 };
 
 export function usePaymentsData(isStaff: boolean, userId: string | undefined) {
@@ -95,7 +90,9 @@ export function usePaymentsData(isStaff: boolean, userId: string | undefined) {
     queryKey: ["profiles", "payment-lookup"],
     enabled: !!userId && isStaff,
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("id,first_name,last_name,email,phone");
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,first_name,last_name,email,phone");
       if (error) throw new Error(error.message);
       return (data ?? []) as ProfileLite[];
     },
@@ -147,19 +144,31 @@ function formatDate(iso: string | null | undefined): string {
 }
 
 function ReceiptPreview({ path }: { path: string | null }) {
-  const { data: url, isLoading, error } = useQuery({
+  const {
+    data: url,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["receipt-url", path],
     enabled: !!path,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data, error: err } = await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(path!, 60 * 10);
+      const { data, error: err } = await supabase.storage
+        .from(RECEIPT_BUCKET)
+        .createSignedUrl(path!, 60 * 10);
       if (err) throw new Error(err.message);
       return data.signedUrl;
     },
   });
-  if (!path) return <p className="text-sm text-muted-foreground">No receipt uploaded — check the reference only.</p>;
+  if (!path)
+    return (
+      <p className="text-sm text-muted-foreground">
+        No receipt uploaded — check the reference only.
+      </p>
+    );
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading receipt…</p>;
-  if (error || !url) return <p className="text-sm text-destructive">Couldn't load the receipt file.</p>;
+  if (error || !url)
+    return <p className="text-sm text-destructive">Couldn't load the receipt file.</p>;
   const isPdf = path.toLowerCase().endsWith(".pdf");
   return (
     <div className="space-y-2">
@@ -169,7 +178,11 @@ function ReceiptPreview({ path }: { path: string | null }) {
         </div>
       ) : (
         <a href={url} target="_blank" rel="noopener noreferrer">
-          <img src={url} alt="Payment receipt" className="max-h-72 w-full rounded-lg border border-border bg-card object-contain" />
+          <img
+            src={url}
+            alt="Payment receipt"
+            className="max-h-72 w-full rounded-lg border border-border bg-card object-contain"
+          />
         </a>
       )}
       <Button asChild variant="outline" size="sm">
@@ -209,7 +222,7 @@ export function PaymentsManager({ pendingOnly = false }: { pendingOnly?: boolean
         .update({
           status,
           review_note: note ?? null,
-          reviewed_by: status === "pending" ? null : user?.id ?? null,
+          reviewed_by: status === "pending" ? null : (user?.id ?? null),
           reviewed_at: status === "pending" ? null : new Date().toISOString(),
         })
         .eq("id", payment.id);
@@ -422,11 +435,7 @@ export function PaymentsManager({ pendingOnly = false }: { pendingOnly?: boolean
         {filtered.length === 0 ? (
           <EmptyState
             icon={Receipt}
-            title={
-              pendingOnly
-                ? "No pending payment receipts"
-                : "No payment receipts found"
-            }
+            title={pendingOnly ? "No pending payment receipts" : "No payment receipts found"}
             text={
               pendingOnly
                 ? "All submitted Telebirr and bank payment receipts have been reviewed."
@@ -476,9 +485,7 @@ export function PaymentsManager({ pendingOnly = false }: { pendingOnly?: boolean
                       </p>
                     )}
                   </TableCell>
-                  <TableCell className="font-semibold">
-                    {formatETB(Number(p.amount))}
-                  </TableCell>
+                  <TableCell className="font-semibold">{formatETB(Number(p.amount))}</TableCell>
                   <TableCell>
                     <Badge variant={STATUS_BADGE[p.status] ?? "muted"} className="capitalize">
                       {p.status}
@@ -609,7 +616,10 @@ export function PaymentsManager({ pendingOnly = false }: { pendingOnly?: boolean
                     Status
                   </p>
                   <div className="mt-0.5">
-                    <Badge variant={STATUS_BADGE[selected.status] ?? "muted"} className="capitalize">
+                    <Badge
+                      variant={STATUS_BADGE[selected.status] ?? "muted"}
+                      className="capitalize"
+                    >
                       {selected.status}
                     </Badge>
                   </div>

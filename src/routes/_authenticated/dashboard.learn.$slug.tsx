@@ -1,12 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { Check, Crown, Film, Lock, PlayCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Crown,
+  Film,
+  Lock,
+  PlayCircle,
+  Search,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { courseQuery } from "@/lib/queries";
 import { useAuth } from "@/lib/auth";
 import { isFreeLesson, isLessonLocked } from "@/lib/access";
+import { replaceChannelBranding } from "@/lib/youtube";
+import { filterAndSortLessons, type LessonAccessFilter } from "@/lib/syllabus";
 import { Button } from "@/components/ui/button";
 import { LoadingBlock } from "@/components/dashboard/ui";
 import { VideoPlayer } from "@/components/dashboard/VideoPlayer";
@@ -21,7 +33,9 @@ export const Route = createFileRoute("/_authenticated/dashboard/learn/$slug")({
 
 /** Bundled sample clip used if a lesson's own video can't be loaded. */
 function localFallbackVideo(lessonIndex: number): string {
-  return isFreeLesson(lessonIndex) ? `/videos/lesson-${lessonIndex + 1}.mp4` : "/videos/lesson-pro.mp4";
+  return isFreeLesson(lessonIndex)
+    ? `/videos/lesson-${lessonIndex + 1}.mp4`
+    : "/videos/lesson-pro.mp4";
 }
 
 function Player() {
@@ -47,6 +61,10 @@ function Player() {
   });
   const [activeId, setActiveId] = useState<string | null>(initialLessonId ?? null);
   const [autoPlay, setAutoPlay] = useState(Boolean(initialLessonId));
+  const [playlistQuery, setPlaylistQuery] = useState("");
+  const [playlistFilter, setPlaylistFilter] = useState<LessonAccessFilter>("all");
+  const [playlistPageSize, setPlaylistPageSize] = useState(10);
+  const [playlistPage, setPlaylistPage] = useState(1);
 
   useEffect(() => {
     if (initialLessonId) {
@@ -55,28 +73,72 @@ function Player() {
     }
   }, [initialLessonId]);
 
-  const lessons = data?.lessons ?? [];
+  const lessons = useMemo(() => data?.lessons ?? [], [data?.lessons]);
   const activeIndex = Math.max(
     0,
     lessons.findIndex((l) => l.id === activeId),
   );
   const current = lessons[activeIndex] ?? lessons[0];
-  const currentLocked = current ? isLessonLocked(activeIndex, { unlocked, signedIn: !!user }) : true;
+  const currentId = current?.id;
+  const currentLocked = current
+    ? isLessonLocked(activeIndex, { unlocked, signedIn: !!user })
+    : true;
   const { data: completedLessons = [] } = useQuery({
     queryKey: ["lesson-progress", courseId, user?.id],
     enabled: !!courseId && !!user,
     queryFn: async () => {
-      const { data: progress, error } = await supabase.from("lesson_progress").select("lesson_id").eq("course_id", courseId!).eq("user_id", user!.id);
+      const { data: progress, error } = await supabase
+        .from("lesson_progress")
+        .select("lesson_id")
+        .eq("course_id", courseId!)
+        .eq("user_id", user!.id);
       if (error) throw error;
       return progress ?? [];
     },
   });
   const isCurrentComplete = !!current && completedLessons.some((p) => p.lesson_id === current.id);
 
+  const filteredPlaylist = useMemo(
+    () =>
+      filterAndSortLessons(lessons, {
+        query: playlistQuery,
+        accessFilter: playlistFilter,
+        sortBy: "order-asc",
+      }),
+    [lessons, playlistQuery, playlistFilter],
+  );
+
+  const effectiveSize =
+    playlistPageSize === 0 ? Math.max(1, filteredPlaylist.length) : playlistPageSize;
+  const totalPlaylistPages = Math.max(1, Math.ceil(filteredPlaylist.length / effectiveSize));
+  const safePlaylistPage = Math.min(playlistPage, totalPlaylistPages);
+
+  useEffect(() => {
+    setPlaylistPage(1);
+  }, [playlistQuery, playlistFilter, playlistPageSize, slug]);
+
+  useEffect(() => {
+    if (!currentId || playlistQuery || playlistFilter !== "all" || playlistPageSize === 0) return;
+    const idx = filteredPlaylist.findIndex((l) => l.id === currentId);
+    if (idx >= 0) {
+      setPlaylistPage(Math.floor(idx / effectiveSize) + 1);
+    }
+  }, [currentId, effectiveSize, filteredPlaylist, playlistFilter, playlistPageSize, playlistQuery]);
+
+  const visiblePlaylist = filteredPlaylist.slice(
+    (safePlaylistPage - 1) * effectiveSize,
+    safePlaylistPage * effectiveSize,
+  );
+
   async function markCurrentComplete() {
     if (!current || !courseId || !user || isCurrentComplete) return;
-    const { error } = await supabase.from("lesson_progress").insert({ user_id: user.id, lesson_id: current.id, course_id: courseId });
-    if (error && error.code !== "23505") { toast.error(error.message); return; }
+    const { error } = await supabase
+      .from("lesson_progress")
+      .insert({ user_id: user.id, lesson_id: current.id, course_id: courseId });
+    if (error && error.code !== "23505") {
+      toast.error(error.message);
+      return;
+    }
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["lesson-progress", courseId, user.id] }),
       queryClient.invalidateQueries({ queryKey: ["role-dashboard"] }),
@@ -101,7 +163,7 @@ function Player() {
   if (!data) return <p>Course not found.</p>;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+    <div className="grid items-start gap-8 lg:grid-cols-[1fr_380px]">
       <div>
         <div className="overflow-hidden rounded-2xl bg-deep">
           {currentLocked ? (
@@ -115,12 +177,14 @@ function Player() {
               </Button>
             </div>
           ) : videoLoading ? (
-            <div className="flex aspect-video items-center justify-center text-deep-muted">Loading video…</div>
+            <div className="flex aspect-video items-center justify-center text-deep-muted">
+              Loading video…
+            </div>
           ) : video && current ? (
             <VideoPlayer
               key={`${current.id}-${video}`}
               url={video}
-              title={current.title}
+              title={replaceChannelBranding(current.title)}
               autoPlay={autoPlay}
               fallbackUrl={localFallbackVideo(activeIndex)}
             />
@@ -131,51 +195,182 @@ function Player() {
             </div>
           )}
         </div>
-        <h1 className="mt-6 text-3xl font-semibold">{current?.title}</h1>
+        <h1 className="mt-6 text-3xl font-semibold">
+          {current ? replaceChannelBranding(current.title) : ""}
+        </h1>
         <p className="text-muted-foreground">{data.course.title}</p>
-        {user && current && !currentLocked && <Button className="mt-4" variant={isCurrentComplete ? "outline" : "emerald"} disabled={isCurrentComplete} onClick={() => void markCurrentComplete()}>{isCurrentComplete ? <><Check /> Completed</> : "Mark lesson complete"}</Button>}
+        {user && current && !currentLocked && (
+          <Button
+            className="mt-4"
+            variant={isCurrentComplete ? "outline" : "emerald"}
+            disabled={isCurrentComplete}
+            onClick={() => void markCurrentComplete()}
+          >
+            {isCurrentComplete ? (
+              <>
+                <Check /> Completed
+              </>
+            ) : (
+              "Mark lesson complete"
+            )}
+          </Button>
+        )}
       </div>
-      <ol className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-        {lessons.map((l, i) => {
-          const locked = isLessonLocked(i, { unlocked, signedIn: !!user });
-          const inner = (
-            <>
-              <span className="w-6 text-sm font-bold text-primary">{i + 1}</span>
-              <span className="flex-1 text-sm font-medium">{l.title}</span>
-              {locked ? (
-                <Lock className="h-4 w-4 text-muted-foreground" />
-              ) : completedLessons.some((p) => p.lesson_id === l.id) ? (
-                <Check className="h-4 w-4 text-primary" />
-              ) : (
-                <PlayCircle className="h-4 w-4 text-primary" />
-              )}
-            </>
-          );
-          return (
-            <li key={l.id}>
-              {locked ? (
-                <Link to="/pro" search={{ course: slug }} className="flex items-center gap-3 px-4 py-3 opacity-70 hover:bg-secondary/40">
-                  {inner}
-                </Link>
-              ) : (
+
+      <aside className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+        <div className="space-y-2.5 border-b border-border p-3.5">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-display text-base font-semibold">Course lessons</h2>
+            <span className="text-xs font-medium tabular-nums text-muted-foreground">
+              {filteredPlaylist.length}/{lessons.length}
+            </span>
+          </div>
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              type="search"
+              value={playlistQuery}
+              onChange={(e) => setPlaylistQuery(e.target.value)}
+              placeholder="Find a lesson…"
+              aria-label="Find a lesson"
+              className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {playlistQuery && (
+              <button
+                type="button"
+                onClick={() => setPlaylistQuery("")}
+                aria-label="Clear lesson search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="inline-flex rounded-lg bg-secondary/80 p-0.5">
+              {(
+                [
+                  { id: "all", label: "All" },
+                  { id: "free", label: "Free" },
+                  { id: "pro", label: "Pro" },
+                ] as const
+              ).map((tab) => (
                 <button
+                  key={tab.id}
                   type="button"
-                  onClick={() => {
-                    setActiveId(l.id);
-                    setAutoPlay(true);
-                  }}
+                  onClick={() => setPlaylistFilter(tab.id)}
                   className={cn(
-                    "flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/60",
-                    current?.id === l.id && "bg-secondary",
+                    "rounded-md px-2.5 py-1 text-xs font-semibold transition-colors",
+                    playlistFilter === tab.id
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {inner}
+                  {tab.label}
                 </button>
-              )}
+              ))}
+            </div>
+            <select
+              aria-label="Playlist rows per page"
+              value={playlistPageSize}
+              onChange={(e) => setPlaylistPageSize(Number(e.target.value))}
+              className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-semibold tabular-nums"
+            >
+              <option value={10}>10 / page</option>
+              <option value={20}>20 / page</option>
+              <option value={0}>All</option>
+            </select>
+          </div>
+        </div>
+
+        <ol className="divide-y divide-border">
+          {visiblePlaylist.length > 0 ? (
+            visiblePlaylist.map((l) => {
+              const locked = isLessonLocked(l.originalIndex, { unlocked, signedIn: !!user });
+              const inner = (
+                <>
+                  <span className="w-6 shrink-0 text-xs font-bold tabular-nums text-primary">
+                    {String(l.originalIndex + 1).padStart(2, "0")}
+                  </span>
+                  <span className="line-clamp-2 flex-1 text-sm font-medium">{l.title}</span>
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                    {l.duration_minutes > 0 ? `${l.duration_minutes} min` : "< 1 min"}
+                  </span>
+                  {locked ? (
+                    <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  ) : completedLessons.some((p) => p.lesson_id === l.id) ? (
+                    <Check className="h-4 w-4 shrink-0 text-primary" />
+                  ) : (
+                    <PlayCircle className="h-4 w-4 shrink-0 text-primary" />
+                  )}
+                </>
+              );
+              return (
+                <li key={l.id}>
+                  {locked ? (
+                    <Link
+                      to="/pro"
+                      search={{ course: slug }}
+                      className="flex items-center gap-3 px-4 py-3 opacity-75 transition-colors hover:bg-secondary/40"
+                    >
+                      {inner}
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveId(l.id);
+                        setAutoPlay(true);
+                      }}
+                      className={cn(
+                        "flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/60",
+                        current?.id === l.id && "bg-secondary",
+                      )}
+                    >
+                      {inner}
+                    </button>
+                  )}
+                </li>
+              );
+            })
+          ) : (
+            <li className="px-4 py-6 text-center text-xs text-muted-foreground">
+              No lessons match your search.
             </li>
-          );
-        })}
-      </ol>
+          )}
+        </ol>
+
+        {totalPlaylistPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border px-3.5 py-2.5 text-xs">
+            <span className="tabular-nums text-muted-foreground">
+              Page {safePlaylistPage} of {totalPlaylistPages}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPlaylistPage((p) => Math.max(1, p - 1))}
+                disabled={safePlaylistPage === 1}
+                aria-label="Previous playlist page"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background hover:bg-secondary disabled:pointer-events-none disabled:opacity-40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlaylistPage((p) => Math.min(totalPlaylistPages, p + 1))}
+                disabled={safePlaylistPage === totalPlaylistPages}
+                aria-label="Next playlist page"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background hover:bg-secondary disabled:pointer-events-none disabled:opacity-40"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </aside>
     </div>
   );
 }

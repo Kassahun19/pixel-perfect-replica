@@ -47,8 +47,10 @@ export function SiteHeader() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 transition-all duration-500",
-        scrolled ? "border-b border-border/60 bg-background/85 shadow-soft backdrop-blur-xl" : "bg-background/40 backdrop-blur-sm",
+        "sticky top-0 z-50 transition-all duration-300 print:hidden",
+        scrolled
+          ? "border-b border-border/70 bg-background/95 shadow-soft backdrop-blur-xl"
+          : "border-b border-border/40 bg-background/95 backdrop-blur-md",
       )}
     >
       <div className="mx-auto flex h-18 max-w-7xl items-center justify-between gap-6 px-4 py-3 sm:px-6">
@@ -59,7 +61,7 @@ export function SiteHeader() {
               key={n.to}
               to={n.to}
               activeOptions={{ exact: n.to === "/" }}
-              className="relative rounded-full px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground data-[status=active]:text-primary"
+              className="relative rounded-full px-4 py-2 text-sm font-semibold text-foreground/80 transition-colors hover:text-primary data-[status=active]:text-primary"
             >
               {({ isActive }) => (
                 <>
@@ -88,7 +90,9 @@ export function SiteHeader() {
                   {initials(profile)}
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel className="truncate">{displayName(profile) || user.email}</DropdownMenuLabel>
+                  <DropdownMenuLabel className="truncate">
+                    {displayName(profile) || user.email}
+                  </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate({ to: "/dashboard" })}>
                     <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
@@ -127,7 +131,7 @@ export function SiteHeader() {
                 to={n.to}
                 onClick={() => setOpen(false)}
                 activeOptions={{ exact: n.to === "/" }}
-                className="rounded-lg px-3 py-3 font-semibold text-muted-foreground data-[status=active]:bg-secondary data-[status=active]:text-primary"
+                className="rounded-lg px-3 py-3 font-semibold text-foreground/80 data-[status=active]:bg-secondary data-[status=active]:text-primary"
               >
                 {n.label}
               </Link>

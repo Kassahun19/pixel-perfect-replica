@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
 import { createMockSupabaseClient, warnMockOnce } from "@/integrations/supabase/mock";
+import { replaceChannelBranding } from "@/lib/youtube";
 
 function publicClient() {
   const url = process.env["SUPABASE_URL"];
@@ -14,7 +15,8 @@ function publicClient() {
   const isOpaque = key.startsWith("sb_publishable_") || key.startsWith("sb_secret_");
   const shim: typeof fetch = (input, init) => {
     const headers = new Headers(init?.headers);
-    if (isOpaque && headers.get("Authorization") === `Bearer ${key}`) headers.delete("Authorization");
+    if (isOpaque && headers.get("Authorization") === `Bearer ${key}`)
+      headers.delete("Authorization");
     headers.set("apikey", key);
     return fetch(input, { ...init, headers });
   };
@@ -88,13 +90,19 @@ export const getPublicCourse = createServerFn({ method: "GET" })
         ...c,
         category: c.categories ? { name: c.categories.name, slug: c.categories.slug } : null,
       },
-      lessons: lessons ?? [],
+      lessons: (lessons ?? []).map((lesson) => ({
+        ...lesson,
+        title: replaceChannelBranding(lesson.title),
+      })),
     };
   });
 
 export const listPublicCategories = createServerFn({ method: "GET" }).handler(async () => {
   const sb = publicClient();
-  const { data, error } = await sb.from("categories").select("id,name,slug,description").order("name");
+  const { data, error } = await sb
+    .from("categories")
+    .select("id,name,slug,description")
+    .order("name");
   if (error) throw new Error(error.message);
   return data ?? [];
 });

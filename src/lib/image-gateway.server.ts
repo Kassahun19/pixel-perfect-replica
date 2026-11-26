@@ -1,15 +1,6 @@
-export type ImageConfig = {
-  baseURL: string;
-  apiKey: string;
-  model: string;
-  format: "openai" | "gemini-chat" | "generate-content" | "cloudflare-input";
-};
+import { GoogleGenAI, type GenerateContentResponse } from "@google/genai";
 
-export const imageSettings: Omit<ImageConfig, "apiKey"> = {
-  baseURL: "https://ai.gateway.lovable.dev",
-  model: "openai/gpt-image-2.5-sunburst",
-  format: "openai",
-};
+export const GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image";
 
 export type CourseThumbnailPromptInput = {
   title: string;
@@ -19,9 +10,18 @@ export type CourseThumbnailPromptInput = {
   category?: string | undefined;
 };
 
+export type GeneratedImageResult = {
+  b64Json: string;
+  mimeType: string;
+};
+
 export function buildCourseThumbnailPrompt(input: CourseThumbnailPromptInput): string {
   const title = input.title.trim();
-  const subjectDetails = [input.category?.trim(), input.shortDescription?.trim(), input.description?.trim().slice(0, 180)]
+  const subjectDetails = [
+    input.category?.trim(),
+    input.shortDescription?.trim(),
+    input.description?.trim().slice(0, 180),
+  ]
     .filter(Boolean)
     .join(". ");
   const level = input.level?.trim() || "Beginner";
@@ -38,44 +38,62 @@ export function buildCourseThumbnailPrompt(input: CourseThumbnailPromptInput): s
     .join(" ");
 }
 
-export function generateImage(
-  config: ImageConfig,
-  prompt: string,
-  stream = true,
-  signal?: AbortSignal,
-) {
-  let input: Record<string, unknown>;
-  switch (config.format) {
-    case "openai":
-      input = {
-        prompt,
-        size: "1536x1024",
-        quality: "medium",
-        ...(stream ? { partial_images: 1 } : {}),
+export function extractGeminiImageResult(
+  response: GenerateContentResponse,
+): GeneratedImageResult | null {
+  for (const part of response.candidates?.[0]?.content?.parts ?? []) {
+    if (part.inlineData?.data) {
+      return {
+        b64Json: part.inlineData.data,
+        mimeType: part.inlineData.mimeType ?? "image/png",
       };
-      break;
-    case "cloudflare-input":
-      input = { input: { prompt } };
-      break;
-    case "generate-content":
-      input = {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-      };
-      break;
-    default:
-      input = {
-        messages: [{ role: "user", content: prompt }],
-        modalities: ["image", "text"],
-      };
+    }
   }
-  return fetch(`${config.baseURL}/v1/images/generations`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model: config.model, ...input, ...(stream ? { stream: true } : {}) }),
-    signal: signal ?? null,
+  return null;
+}
+
+export function formatImageSsePayload(result: GeneratedImageResult): string {
+  const payload = JSON.stringify({
+    type: "image_generation.completed",
+    b64_json: result.b64Json,
+    mime_type: result.mimeType,
   });
+  return `event: image_generation.completed\ndata: ${payload}\n\n`;
+}
+
+export function createGeminiClient(apiKey: string): GoogleGenAI {
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
+}
+
+export async function generateCourseThumbnailImage(
+  apiKey: string,
+  prompt: string,
+  signal?: AbortSignal,
+): Promise<GeneratedImageResult> {
+  const ai = createGeminiClient(apiKey);
+  const response = await ai.models.generateContent({
+    model: GEMINI_IMAGE_MODEL,
+    contents: {
+      parts: [{ text: prompt }],
+    },
+    config: {
+      imageConfig: {
+        aspectRatio: "16:9",
+      },
+      ...(signal ? { abortSignal: signal } : {}),
+    },
+  });
+
+  const image = extractGeminiImageResult(response);
+  if (!image) {
+    throw new Error("Gemini API returned no image data.");
+  }
+  return image;
 }

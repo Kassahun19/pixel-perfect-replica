@@ -1,12 +1,13 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Crown, Lock, PlayCircle, Signal } from "lucide-react";
+import { CheckCircle2, Clock, Crown, PlayCircle, Signal } from "lucide-react";
 import { PublicLayout } from "@/components/site/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { courseQuery } from "@/lib/queries";
-import { FREE_LESSON_LIMIT, formatETB, isFreeLesson } from "@/lib/access";
+import { FREE_LESSON_LIMIT, formatETB } from "@/lib/access";
 import { useAuth } from "@/lib/auth";
 import { CourseThumbnail } from "@/components/site/CourseThumbnail";
+import { CourseSyllabus } from "@/components/site/CourseSyllabus";
 
 export const Route = createFileRoute("/courses/$slug")({
   loader: async ({ context, params }) => {
@@ -18,8 +19,14 @@ export const Route = createFileRoute("/courses/$slug")({
     meta: [
       { title: loaderData ? `${loaderData.title} — Ezana Academy` : "Course — Ezana Academy" },
       { name: "description", content: loaderData?.description ?? "An Ezana Academy course." },
-      { property: "og:title", content: loaderData ? `${loaderData.title} — Ezana Academy` : "Course — Ezana Academy" },
-      { property: "og:description", content: loaderData?.description ?? "An Ezana Academy course." },
+      {
+        property: "og:title",
+        content: loaderData ? `${loaderData.title} — Ezana Academy` : "Course — Ezana Academy",
+      },
+      {
+        property: "og:description",
+        content: loaderData?.description ?? "An Ezana Academy course.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -28,7 +35,9 @@ export const Route = createFileRoute("/courses/$slug")({
     <PublicLayout>
       <div className="mx-auto max-w-xl px-4 py-32 text-center">
         <h1 className="text-4xl font-semibold">Course not found</h1>
-        <Button asChild variant="emerald" className="mt-6"><Link to="/courses">Back to courses</Link></Button>
+        <Button asChild variant="emerald" className="mt-6">
+          <Link to="/courses">Back to courses</Link>
+        </Button>
       </div>
     </PublicLayout>
   ),
@@ -54,12 +63,23 @@ function CourseDetail() {
                 {course.category.name}
               </span>
             )}
-            <h1 className="mt-5 text-4xl font-semibold leading-tight md:text-6xl">{course.title}</h1>
+            <h1 className="mt-5 text-4xl font-semibold leading-tight md:text-6xl">
+              {course.title}
+            </h1>
             <p className="mt-5 max-w-2xl text-lg text-deep-muted">{course.description}</p>
             <div className="mt-8 flex flex-wrap gap-6 text-sm">
-              <span className="flex items-center gap-2"><PlayCircle className="h-4 w-4 text-gold" />{lessons.length} videos</span>
-              <span className="flex items-center gap-2"><Clock className="h-4 w-4 text-gold" />{Math.round(totalMin / 60 * 10) / 10}h of video</span>
-              <span className="flex items-center gap-2"><Signal className="h-4 w-4 text-gold" />{course.level}</span>
+              <span className="flex items-center gap-2">
+                <PlayCircle className="h-4 w-4 text-gold" />
+                {lessons.length} videos
+              </span>
+              <span className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-gold" />
+                {Math.round((totalMin / 60) * 10) / 10}h of video
+              </span>
+              <span className="flex items-center gap-2">
+                <Signal className="h-4 w-4 text-gold" />
+                {course.level}
+              </span>
             </div>
           </div>
           <div className="animate-fade-up rounded-3xl border border-gold/30 bg-card p-3 text-card-foreground shadow-elegant [animation-delay:150ms]">
@@ -71,7 +91,9 @@ function CourseDetail() {
               className="aspect-video w-full rounded-2xl"
             />
             <div className="p-5">
-              <p className="text-sm text-muted-foreground">First {FREE_LESSON_LIMIT} videos free · Full course</p>
+              <p className="text-sm text-muted-foreground">
+                First {FREE_LESSON_LIMIT} videos free · Full course
+              </p>
               <p className="font-display text-4xl font-semibold text-primary">{formatETB()}</p>
               <div className="mt-5 grid gap-2">
                 {user ? (
@@ -97,63 +119,9 @@ function CourseDetail() {
         <div className="pattern-tibeb h-1.5 w-full opacity-70" />
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.4fr_1fr]">
-        <div>
-          <h2 className="text-3xl font-semibold">Course content</h2>
-          <ol className="mt-6 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-            {lessons.map((l, i) => {
-              const free = isFreeLesson(i);
-              const content = (
-                <>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-bold text-primary">
-                    {i + 1}
-                  </span>
-                  <span className="flex-1 font-medium">{l.title}</span>
-                  <span className="text-xs text-muted-foreground">{l.duration_minutes} min</span>
-                  {free ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success">
-                      <PlayCircle className="h-3.5 w-3.5" /> Free
-                    </span>
-                  ) : (
-                    <Lock className="h-4 w-4 text-muted-foreground" aria-label="Locked" />
-                  )}
-                </>
-              );
-              return (
-                <li key={l.id}>
-                  {free ? (
-                    user ? (
-                      <Link
-                        to="/dashboard/learn/$slug"
-                        params={{ slug: course.slug }}
-                        search={{ lesson: l.id }}
-                        className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-secondary/50"
-                      >
-                        {content}
-                      </Link>
-                    ) : (
-                      <Link
-                        to="/register"
-                        className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-secondary/50"
-                      >
-                        {content}
-                      </Link>
-                    )
-                  ) : (
-                    <Link
-                      to="/pro"
-                      search={{ course: course.slug }}
-                      className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-secondary/30"
-                    >
-                      {content}
-                    </Link>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-        <aside>
+      <section className="mx-auto grid max-w-7xl items-start gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.45fr_1fr] lg:gap-12">
+        <CourseSyllabus lessons={lessons} courseSlug={course.slug} isSignedIn={!!user} />
+        <aside className="lg:sticky lg:top-24">
           <h2 className="text-3xl font-semibold">What you'll learn</h2>
           <ul className="mt-6 space-y-3">
             {course.objectives.map((o) => (
@@ -163,6 +131,17 @@ function CourseDetail() {
               </li>
             ))}
           </ul>
+          <div className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-soft">
+            <p className="text-sm font-semibold text-foreground">Ready to unlock every lesson?</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Get instant access to all {lessons.length} videos in this course with Ezana Pro.
+            </p>
+            <Button asChild variant="hero" className="mt-4 w-full">
+              <Link to="/pro" search={{ course: course.slug }}>
+                <Crown /> Unlock full course · {formatETB()}
+              </Link>
+            </Button>
+          </div>
         </aside>
       </section>
     </PublicLayout>
