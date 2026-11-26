@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Clock, PlayCircle, Sparkles } from "lucide-react";
 import type { PublicCourse } from "@/lib/public.functions";
 import { FREE_LESSON_LIMIT, formatETB } from "@/lib/access";
-import { courseImageUrl } from "@/lib/course-image";
+import { CourseThumbnail } from "@/components/site/CourseThumbnail";
 
 export function CourseCard({ course, index = 0 }: { course: PublicCourse; index?: number }) {
   return (
@@ -13,14 +13,12 @@ export function CourseCard({ course, index = 0 }: { course: PublicCourse; index?
       style={{ animationDelay: `${index * 80}ms` }}
     >
       <div className="relative aspect-[16/10] overflow-hidden">
-        {courseImageUrl(course.image_url) && (
-          <img
-            src={courseImageUrl(course.image_url)}
-            alt={course.title}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
-          />
-        )}
+        <CourseThumbnail
+          imageUrl={course.image_url}
+          course={course}
+          alt={course.title}
+          className="h-full w-full transition-transform duration-700 group-hover:scale-110"
+        />
         <div className="bg-fade-deep absolute inset-0 opacity-60" />
         {course.category && (
           <span className="absolute left-4 top-4 rounded-full bg-background/90 px-3 py-1 text-xs font-bold text-primary backdrop-blur">

@@ -5,14 +5,17 @@ import { toast } from "sonner";
 import {
   Activity, Archive, ArrowDownToLine, ArrowRight, BadgeCheck, BookOpen, BookOpenCheck,
   Check, CircleDollarSign, ClipboardList, GraduationCap, LayoutDashboard, Loader2, Mail, PlayCircle,
-  Megaphone, MessageSquare, Plus, Search, Settings, Shield, UserRound, Users, Wallet,
+  Megaphone, MessageSquare, Plus, Search, Settings, Shield, Sparkles, UserRound, Users, Wallet, X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, displayName, type AppRole } from "@/lib/auth";
 import type { Tables } from "@/integrations/supabase/types";
 import { downloadCsv } from "@/lib/csv";
 import { FREE_LESSON_LIMIT, formatETB } from "@/lib/access";
-import { courseImageUrl } from "@/lib/course-image";
+import { courseCoverUrl, courseImageUrl, fallbackCourseToken } from "@/lib/course-image";
+import { dataUrlToFile, streamImage } from "@/lib/stream-image";
+import { cn } from "@/lib/utils";
+import { CourseThumbnail } from "@/components/site/CourseThumbnail";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -233,16 +236,24 @@ export function RoleDashboard() {
     setBusy(true);
     let imageUrl = values.image_url.trim() || null;
     let uploadedCoverPath: string | null = null;
-    if (values.coverFile) {
-      if (values.coverFile.size > 10 * 1024 * 1024) { setBusy(false); toast.error("Course cover images must be 10 MB or smaller"); return; }
-      if (!/^image\/(jpeg|png|webp)$/.test(values.coverFile.type)) { setBusy(false); toast.error("Choose a JPG, PNG, or WebP cover image"); return; }
-      const safeName = values.coverFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const fileToUpload = values.coverFile ?? values.generatedCoverFile;
+    if (fileToUpload) {
+      if (fileToUpload.size > 10 * 1024 * 1024) { setBusy(false); toast.error("Course cover images must be 10 MB or smaller"); return; }
+      if (!/^image\/(jpeg|png|webp)$/.test(fileToUpload.type)) { setBusy(false); toast.error("Choose a JPG, PNG, or WebP cover image"); return; }
+      const safeName = fileToUpload.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       uploadedCoverPath = `${user.id}/${crypto.randomUUID()}-${safeName}`;
-      const { error: uploadError } = await supabase.storage.from("course-covers").upload(uploadedCoverPath, values.coverFile, {
-        cacheControl: "3600", contentType: values.coverFile.type, upsert: false,
+      const { error: uploadError } = await supabase.storage.from("course-covers").upload(uploadedCoverPath, fileToUpload, {
+        cacheControl: "3600", contentType: fileToUpload.type, upsert: false,
       });
       if (uploadError) { setBusy(false); toast.error(`Cover image upload failed: ${uploadError.message}`); return; }
-      imageUrl = supabase.storage.from("course-covers").getPublicUrl(uploadedCoverPath).data.publicUrl;
+      imageUrl = courseCoverUrl(uploadedCoverPath);
+    }
+    if (!imageUrl) {
+      imageUrl = fallbackCourseToken({
+        title: values.title,
+        short_description: values.short_description,
+        description: values.description,
+      });
     }
     const payload = {
       title: values.title.trim(), slug: slugify(values.slug || values.title),
@@ -532,9 +543,9 @@ function profilesByLabel(profiles: Profile[], id: string) { const p = profiles.f
 function SnapshotRow({ icon: Icon, label, value, sub }: { icon: typeof BookOpen; label: string; value: string; sub: string }) { return <div className="flex items-center gap-3 rounded-xl bg-secondary/60 p-4"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-card text-primary"><Icon className="h-5 w-5" /></span><div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="font-semibold">{value}</p><p className="text-xs text-muted-foreground">{sub}</p></div></div>; }
 function QueueRow({ icon: Icon, title, detail, onClick }: { icon: typeof Wallet; title: string; detail: string; onClick: () => void }) { return <button onClick={onClick} className="flex w-full items-center gap-3 rounded-xl border border-border p-4 text-left hover:bg-secondary/60"><Icon className="h-5 w-5 text-primary" /><div className="flex-1"><p className="font-semibold">{title}</p><p className="text-sm text-muted-foreground">{detail}</p></div><ArrowRight className="h-4 w-4 text-muted-foreground" /></button>; }
 function ActivityLine({ item, profile }: { item: AuditLog; profile: Profile | undefined }) { return <div className="flex gap-3"><span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-primary"><Activity className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-sm font-semibold">{item.action.replaceAll("_", " ")}</p><p className="truncate text-xs text-muted-foreground">{profile ? displayName(profile) : "System"} · {item.entity}</p><p className="text-xs text-muted-foreground">{dateLabel(item.created_at)}</p></div></div>; }
-function CourseSummary({ course, learners }: { course: Course; learners: number }) { return <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-4"><div className="min-w-0"><p className="truncate font-semibold">{course.title}</p><p className="text-sm text-muted-foreground">{learners} learners · {course.level}</p></div><Badge variant={course.status === "published" ? "success" : "muted"}>{course.status}</Badge></div>; }
+function CourseSummary({ course, learners }: { course: Course; learners: number }) { return <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-4"><div className="flex min-w-0 items-center gap-3"><CourseThumbnail imageUrl={course.image_url} course={course} alt={course.title} className="h-11 w-16 shrink-0 rounded-lg" /><div className="min-w-0"><p className="truncate font-semibold">{course.title}</p><p className="text-sm text-muted-foreground">{learners} learners · {course.level}</p></div></div><Badge variant={course.status === "published" ? "success" : "muted"}>{course.status}</Badge></div>; }
 function ProgressRow({ course, completed, total }: { course: Course | undefined; completed: number; total: number }) { const pct = total ? Math.min(100, Math.round(completed / total * 100)) : 0; return <div><div className="mb-1 flex justify-between gap-3 text-sm"><span className="truncate font-semibold">{course?.title ?? "Course"}</span><span className="shrink-0 text-muted-foreground">{completed}/{total} lessons</span></div><div className="h-2 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} /></div><p className="mt-1 text-right text-xs text-muted-foreground">{pct}% complete</p></div>; }
-function StudentCourseRow({ course, completed, total }: { course: Course; completed: number; total: number }) { return <Link to="/dashboard/learn/$slug" params={{ slug: course.slug }} className="flex items-center gap-4 rounded-xl border border-border p-4 transition-colors hover:bg-secondary/60"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-gradient text-primary-foreground"><BookOpenCheck className="h-5 w-5" /></span><div className="min-w-0 flex-1"><p className="truncate font-semibold">{course.title}</p><p className="text-xs text-muted-foreground">{completed} of {total} lessons complete</p></div><ArrowRight className="h-4 w-4 shrink-0 text-primary" /></Link>; }
+function StudentCourseRow({ course, completed, total }: { course: Course; completed: number; total: number }) { return <Link to="/dashboard/learn/$slug" params={{ slug: course.slug }} className="flex items-center gap-4 rounded-xl border border-border p-4 transition-colors hover:bg-secondary/60"><CourseThumbnail imageUrl={course.image_url} course={course} alt={course.title} className="h-12 w-20 shrink-0 rounded-xl" /><div className="min-w-0 flex-1"><p className="truncate font-semibold">{course.title}</p><p className="text-xs text-muted-foreground">{completed} of {total} lessons complete</p></div><ArrowRight className="h-4 w-4 shrink-0 text-primary" /></Link>; }
 function AnnouncementLine({ announcement }: { announcement: Announcement }) { return <article className="border-b border-border py-3 last:border-0"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{announcement.title}</h3><span className="shrink-0 text-xs text-muted-foreground">{dateLabel(announcement.publish_at)}</span></div><p className="mt-1 line-clamp-3 text-sm text-muted-foreground">{announcement.body}</p></article>; }
 
 function SearchBox({ value, onChange, placeholder = "Search records" }: { value: string; onChange: (value: string) => void; placeholder?: string }) {
@@ -585,7 +596,7 @@ function CoursesSection({ role, data, userId, search, setSearch, onAdd, onEdit, 
     {courses.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{courses.map((course) => {
       const enrolled = userId ? enrollmentFor(userId, course.id) : false;
       return <article key={course.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        {courseImageUrl(course.image_url) ? <img src={courseImageUrl(course.image_url)} alt="" className="aspect-video w-full bg-secondary object-cover" /> : <div className="flex aspect-video items-center justify-center bg-emerald-gradient text-primary-foreground"><BookOpen className="h-10 w-10 opacity-80" /></div>}
+        <CourseThumbnail imageUrl={course.image_url} course={course} alt={course.title} className="aspect-video w-full" />
         <div className="p-5"><div className="mb-2 flex items-start justify-between gap-2"><h2 className="font-semibold leading-snug">{course.title}</h2><Badge variant={course.status === "published" ? "success" : course.status === "archived" ? "muted" : "gold"}>{course.status}</Badge></div><p className="min-h-10 line-clamp-2 text-sm text-muted-foreground">{course.short_description}</p><div className="mt-4 flex items-center justify-between text-xs text-muted-foreground"><span>{course.level} · {course.duration_hours} hours</span>{role !== "student" && <span>{learnerCount(course.id)} learners</span>}</div>
           <div className="mt-4 flex flex-wrap gap-2">{role === "student" && course.status === "published" && <>{enrolled ? <Button asChild size="sm" variant="emerald"><Link to="/dashboard/learn/$slug" params={{ slug: course.slug }}>Continue learning <ArrowRight /></Link></Button> : <Button size="sm" variant="emerald" disabled={busy} onClick={() => void onEnroll(course)}>Enroll</Button>}<Button asChild size="sm" variant="outline"><Link to="/dashboard/learn/$slug" params={{ slug: course.slug }}>Preview</Link></Button></>}
             {editable && <Button size="sm" variant="outline" onClick={() => onEdit(course)}>Edit</Button>}
@@ -598,7 +609,7 @@ function CoursesSection({ role, data, userId, search, setSearch, onAdd, onEdit, 
 }
 
 type YoutubeVideo = { id: string; title: string; description: string };
-type CourseFormValues = { title: string; slug: string; short_description: string; description: string; image_url: string; coverFile: File | null; level: string; duration_hours: string; status: Course["status"]; instructor_id: string; youtubeApiKey: string; youtubeChannelId: string };
+type CourseFormValues = { title: string; slug: string; short_description: string; description: string; image_url: string; coverFile: File | null; generatedCoverFile: File | null; level: string; duration_hours: string; status: Course["status"]; instructor_id: string; youtubeApiKey: string; youtubeChannelId: string };
 
 function CourseEditor({ open, course, role, userId, instructors, busy, onOpenChange, onSave }: {
   open: boolean; course: Course | null; role: AppRole; userId: string; instructors: Profile[]; busy: boolean;
@@ -610,11 +621,19 @@ function CourseEditor({ open, course, role, userId, instructors, busy, onOpenCha
   const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([]);
   const [loadingYoutube, setLoadingYoutube] = useState(false);
   const [coverPreview, setCoverPreview] = useState<string | undefined>();
+  const [generatedPreview, setGeneratedPreview] = useState<string | undefined>();
+  const [generatingThumbnail, setGeneratingThumbnail] = useState(false);
+  const [thumbnailPartial, setThumbnailPartial] = useState(false);
+  const [thumbnailError, setThumbnailError] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
-    setValues(course ? { title: course.title, slug: course.slug, short_description: course.short_description, description: course.description, image_url: course.image_url ?? "", coverFile: null, level: course.level, duration_hours: String(course.duration_hours), status: course.status, instructor_id: course.instructor_id ?? "", youtubeApiKey: "", youtubeChannelId: "" } : blankCourse);
+    setValues(course ? { title: course.title, slug: course.slug, short_description: course.short_description, description: course.description, image_url: course.image_url ?? "", coverFile: null, generatedCoverFile: null, level: course.level, duration_hours: String(course.duration_hours), status: course.status, instructor_id: course.instructor_id ?? "", youtubeApiKey: "", youtubeChannelId: "" } : blankCourse);
     setYoutubeVideos([]);
     setSelectedVideoIds([]);
+    setGeneratedPreview(undefined);
+    setGeneratingThumbnail(false);
+    setThumbnailPartial(false);
+    setThumbnailError(null);
     if (coverInputRef.current) coverInputRef.current.value = "";
   }, [open, course]);
   useEffect(() => {
@@ -623,10 +642,70 @@ function CourseEditor({ open, course, role, userId, instructors, busy, onOpenCha
       setCoverPreview(localUrl);
       return () => URL.revokeObjectURL(localUrl);
     }
+    if (generatedPreview) {
+      setCoverPreview(generatedPreview);
+      return undefined;
+    }
     setCoverPreview(courseImageUrl(values.image_url));
     return undefined;
-  }, [values.coverFile, values.image_url]);
+  }, [values.coverFile, generatedPreview, values.image_url]);
   const set = (key: keyof CourseFormValues, value: string) => setValues((prev) => ({ ...prev, [key]: value }));
+  async function generateAiThumbnail(sourceValues: CourseFormValues): Promise<File | null> {
+    if (!sourceValues.title.trim()) {
+      toast.error("Enter a course title before generating a thumbnail");
+      return null;
+    }
+    setGeneratingThumbnail(true);
+    setThumbnailPartial(true);
+    setThumbnailError(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Your session expired. Please sign in again.");
+      const finalDataUrl = await streamImage(
+        "/api/generate-course-thumbnail",
+        {
+          title: sourceValues.title.trim(),
+          shortDescription: sourceValues.short_description.trim() || undefined,
+          description: sourceValues.description.trim() || undefined,
+          level: sourceValues.level,
+        },
+        (dataUrl, isFinal) => {
+          setGeneratedPreview(dataUrl);
+          setThumbnailPartial(!isFinal);
+        },
+        undefined,
+        { Authorization: `Bearer ${token}` },
+      );
+      const generatedFile = dataUrlToFile(finalDataUrl, `${slugify(sourceValues.title) || "course"}-ai-cover.png`);
+      setValues((prev) => ({ ...prev, coverFile: null, generatedCoverFile: generatedFile }));
+      if (coverInputRef.current) coverInputRef.current.value = "";
+      return generatedFile;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not generate an AI thumbnail";
+      setThumbnailError(message);
+      setGeneratedPreview(undefined);
+      return null;
+    } finally {
+      setGeneratingThumbnail(false);
+      setThumbnailPartial(false);
+    }
+  }
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!values.title.trim()) { toast.error("Enter a course title"); return; }
+    let submitValues = values;
+    const needsAutoThumbnail = !course && !values.coverFile && !values.generatedCoverFile && !values.image_url.trim();
+    if (needsAutoThumbnail) {
+      const generatedFile = await generateAiThumbnail(values);
+      if (generatedFile) {
+        submitValues = { ...values, generatedCoverFile: generatedFile };
+      } else {
+        toast.message("AI thumbnail unavailable — assigned a subject-matched fallback thumbnail.");
+      }
+    }
+    await onSave(submitValues, course ?? undefined, youtubeVideos.filter((video) => selectedVideoIds.includes(video.id)));
+  }
   async function loadYoutubeVideos() {
     if (!values.youtubeApiKey.trim() || !values.youtubeChannelId.trim()) { toast.error("Enter a YouTube API key and Channel ID"); return; }
     setLoadingYoutube(true);
@@ -644,16 +723,87 @@ function CourseEditor({ open, course, role, userId, instructors, busy, onOpenCha
     } finally { setLoadingYoutube(false); }
   }
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>{course ? "Edit course" : "Create a course"}</DialogTitle><DialogDescription>Course data is saved to the academy catalog.</DialogDescription></DialogHeader>
-    <form className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); if (!values.title.trim()) { toast.error("Enter a course title"); return; } void onSave(values, course ?? undefined, youtubeVideos.filter((video) => selectedVideoIds.includes(video.id))); }}>
+    <form className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void handleSubmit(e)}>
       <label className="space-y-1.5 text-sm font-medium">Course title<Input required value={values.title} onChange={(e) => set("title", e.target.value)} /></label>
       <label className="space-y-1.5 text-sm font-medium">URL slug<Input required value={values.slug} onChange={(e) => set("slug", e.target.value)} placeholder={slugify(values.title)} /></label>
       <label className="space-y-1.5 text-sm font-medium sm:col-span-2">Short description<Input value={values.short_description} onChange={(e) => set("short_description", e.target.value)} maxLength={240} /></label>
       <label className="space-y-1.5 text-sm font-medium sm:col-span-2">Course description<Textarea value={values.description} onChange={(e) => set("description", e.target.value)} rows={4} /></label>
       <div className="space-y-2 sm:col-span-2">
-        <label htmlFor="course-cover" className="text-sm font-medium">Course cover image</label>
-        <Input ref={coverInputRef} id="course-cover" type="file" accept="image/jpeg,image/png,image/webp" className="h-auto min-h-11 py-2" onChange={(e) => setValues((prev) => ({ ...prev, coverFile: e.target.files?.[0] ?? null }))} />
-        <p className="text-xs text-muted-foreground">Upload a JPG, PNG, or WebP image, up to 10 MB.</p>
-        {coverPreview && <img src={coverPreview} alt="Course cover preview" className="aspect-[16/7] w-full rounded-xl border border-border bg-secondary object-cover" />}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <label htmlFor="course-cover" className="text-sm font-medium">Course cover image</label>
+          <div className="flex items-center gap-2">
+            {(values.coverFile || values.generatedCoverFile) && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={busy || generatingThumbnail}
+                onClick={() => {
+                  setValues((prev) => ({ ...prev, coverFile: null, generatedCoverFile: null }));
+                  setGeneratedPreview(undefined);
+                  setThumbnailError(null);
+                  if (coverInputRef.current) coverInputRef.current.value = "";
+                }}
+              >
+                <X className="h-3.5 w-3.5" /> Clear
+              </Button>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy || generatingThumbnail || !values.title.trim()}
+              onClick={() => void generateAiThumbnail(values)}
+            >
+              {generatingThumbnail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {generatingThumbnail ? "Generating…" : values.generatedCoverFile || coverPreview ? "Regenerate AI thumbnail" : "Generate AI thumbnail"}
+            </Button>
+          </div>
+        </div>
+        <Input
+          ref={coverInputRef}
+          id="course-cover"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="h-auto min-h-11 py-2"
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+            setValues((prev) => ({ ...prev, coverFile: file, generatedCoverFile: file ? null : prev.generatedCoverFile }));
+            if (file) {
+              setGeneratedPreview(undefined);
+              setThumbnailError(null);
+            }
+          }}
+        />
+        <p className="text-xs text-muted-foreground">
+          {values.coverFile
+            ? "Custom upload selected (takes priority)."
+            : values.generatedCoverFile
+              ? "AI-generated thumbnail ready to save."
+              : course
+                ? "Upload a JPG, PNG, or WebP (up to 10 MB), or generate an AI thumbnail."
+                : "Upload a custom image (up to 10 MB), or leave empty to auto-generate an AI thumbnail matching your course title."}
+        </p>
+        {thumbnailError && <p className="text-xs text-destructive">{thumbnailError}</p>}
+        {coverPreview && (
+          <div className="relative overflow-hidden rounded-xl border border-border bg-secondary">
+            <img
+              src={coverPreview}
+              alt="Course cover preview"
+              className={cn(
+                "aspect-[16/7] w-full object-cover transition-[filter] duration-500",
+                thumbnailPartial ? "blur-2xl" : "blur-0",
+              )}
+            />
+            {generatingThumbnail && (
+              <div className="absolute inset-0 flex items-center justify-center bg-deep/35 text-xs font-semibold text-deep-foreground">
+                <span className="inline-flex items-center gap-2 rounded-full bg-deep/80 px-3 py-1.5 backdrop-blur">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Crafting course thumbnail…
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <label className="space-y-1.5 text-sm font-medium">Level<select value={values.level} onChange={(e) => set("level", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3"><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select></label>
       <label className="space-y-1.5 text-sm font-medium">Duration (hours)<Input type="number" min="0" value={values.duration_hours} onChange={(e) => set("duration_hours", e.target.value)} /></label>
@@ -669,12 +819,12 @@ function CourseEditor({ open, course, role, userId, instructors, busy, onOpenCha
         <Button type="button" variant="outline" disabled={loadingYoutube} onClick={() => void loadYoutubeVideos()}>{loadingYoutube ? <Loader2 className="animate-spin" /> : <PlayCircle />} Load channel videos</Button>
         {youtubeVideos.length > 0 && <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border bg-background p-3">{youtubeVideos.map((video) => <label key={video.id} className="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" checked={selectedVideoIds.includes(video.id)} onChange={(e) => setSelectedVideoIds((ids) => e.target.checked ? [...ids, video.id] : ids.filter((id) => id !== video.id))} /><span className="line-clamp-2">{video.title}</span></label>)}</div>}
       </section>
-      <DialogFooter className="sm:col-span-2"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" variant="emerald" disabled={busy}>{busy ? "Saving…" : "Save course"}</Button></DialogFooter>
+      <DialogFooter className="sm:col-span-2"><Button type="button" variant="outline" disabled={busy || generatingThumbnail} onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" variant="emerald" disabled={busy || generatingThumbnail}>{generatingThumbnail ? "Generating thumbnail…" : busy ? "Saving…" : "Save course"}</Button></DialogFooter>
     </form>
   </DialogContent></Dialog>;
 }
 
-const blankCourse: CourseFormValues = { title: "", slug: "", short_description: "", description: "", image_url: "", coverFile: null, level: "Beginner", duration_hours: "0", status: "draft", instructor_id: "", youtubeApiKey: "", youtubeChannelId: "" };
+const blankCourse: CourseFormValues = { title: "", slug: "", short_description: "", description: "", image_url: "", coverFile: null, generatedCoverFile: null, level: "Beginner", duration_hours: "0", status: "draft", instructor_id: "", youtubeApiKey: "", youtubeChannelId: "" };
 
 function LearnersSection({ data, coursesById, search, setSearch }: { data: DashboardData; coursesById: Map<string, Course>; search: string; setSearch: (s: string) => void }) {
   const learnerIds = [...new Set(data.enrollments.map((e) => e.user_id))];
@@ -708,8 +858,8 @@ function LearningSection({ role, data, userId, childId, selectedChildProfile, co
   const available = data.courses.filter((c) => role === "student" && !enrolledIds.has(c.id));
   return <>
     <PageHeader title={role === "parent" ? `${selectedChildProfile ? displayName(selectedChildProfile) + "’s" : "Child"} course progress` : "My learning"} description={role === "parent" ? "Read-only progress for the selected linked child." : "Pick up a course, track lesson completion, and discover what’s next."} />
-    {enrollmentRows.length ? <div className="grid gap-4 md:grid-cols-2">{enrollmentRows.map((e) => { const course = coursesById.get(e.course_id); const complete = data.progress.filter((p) => p.user_id === learnerId && p.course_id === e.course_id).length; const total = lessonsByCourse.get(e.course_id)?.length ?? 0; if (!course) return null; return <article key={e.id} className="rounded-2xl border border-border bg-card p-5 shadow-soft"><div className="mb-3 flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-gradient text-primary-foreground"><BookOpenCheck className="h-5 w-5" /></span><div className="min-w-0"><h2 className="truncate font-semibold">{course.title}</h2><p className="text-xs text-muted-foreground">Enrolled {dateLabel(e.created_at)}</p></div></div><ProgressRow course={course} completed={complete} total={total} /><div className="mt-4">{role === "student" ? <Button asChild variant="emerald" size="sm"><Link to="/dashboard/learn/$slug" params={{ slug: course.slug }}>Continue learning <ArrowRight /></Link></Button> : <Badge variant="secondary">Read only parent view</Badge>}</div></article>; })}</div> : <EmptyState title="No enrolled courses" text={role === "parent" ? "This child has not enrolled in a course yet." : "Enroll in a course to keep your learning progress in one place."} icon={BookOpen} action={role === "student" ? <Button asChild variant="emerald"><Link to="/courses">Browse catalog</Link></Button> : undefined} />}
-    {role === "student" && available.length > 0 && <Panel title="Recommended courses" className="mt-6"><div className="grid gap-3 sm:grid-cols-2">{available.slice(0, 4).map((course) => <div key={course.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-4"><div className="min-w-0"><p className="truncate font-semibold">{course.title}</p><p className="text-xs text-muted-foreground">{course.level} · {course.duration_hours} hours</p></div><Button size="sm" variant="outline" disabled={busy || enrolled(userId, course.id)} onClick={() => void onEnroll(course)}><Plus className="h-4 w-4" /> Enroll</Button></div>)}</div></Panel>}
+    {enrollmentRows.length ? <div className="grid gap-4 md:grid-cols-2">{enrollmentRows.map((e) => { const course = coursesById.get(e.course_id); const complete = data.progress.filter((p) => p.user_id === learnerId && p.course_id === e.course_id).length; const total = lessonsByCourse.get(e.course_id)?.length ?? 0; if (!course) return null; return <article key={e.id} className="rounded-2xl border border-border bg-card p-5 shadow-soft"><div className="mb-3 flex items-center gap-3"><CourseThumbnail imageUrl={course.image_url} course={course} alt={course.title} className="h-14 w-24 shrink-0 rounded-xl" /><div className="min-w-0"><h2 className="truncate font-semibold">{course.title}</h2><p className="text-xs text-muted-foreground">Enrolled {dateLabel(e.created_at)}</p></div></div><ProgressRow course={course} completed={complete} total={total} /><div className="mt-4">{role === "student" ? <Button asChild variant="emerald" size="sm"><Link to="/dashboard/learn/$slug" params={{ slug: course.slug }}>Continue learning <ArrowRight /></Link></Button> : <Badge variant="secondary">Read only parent view</Badge>}</div></article>; })}</div> : <EmptyState title="No enrolled courses" text={role === "parent" ? "This child has not enrolled in a course yet." : "Enroll in a course to keep your learning progress in one place."} icon={BookOpen} action={role === "student" ? <Button asChild variant="emerald"><Link to="/courses">Browse catalog</Link></Button> : undefined} />}
+    {role === "student" && available.length > 0 && <Panel title="Recommended courses" className="mt-6"><div className="grid gap-3 sm:grid-cols-2">{available.slice(0, 4).map((course) => <div key={course.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-4"><div className="flex min-w-0 items-center gap-3"><CourseThumbnail imageUrl={course.image_url} course={course} alt={course.title} className="h-12 w-20 shrink-0 rounded-xl" /><div className="min-w-0"><p className="truncate font-semibold">{course.title}</p><p className="text-xs text-muted-foreground">{course.level} · {course.duration_hours} hours</p></div></div><Button size="sm" variant="outline" disabled={busy || enrolled(userId, course.id)} onClick={() => void onEnroll(course)}><Plus className="h-4 w-4" /> Enroll</Button></div>)}</div></Panel>}
   </>;
 }
 

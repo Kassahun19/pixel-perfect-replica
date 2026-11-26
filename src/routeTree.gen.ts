@@ -18,10 +18,12 @@ import { Route as ProRouteImport } from './routes/pro'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as ApiGenerateCourseThumbnailRouteImport } from './routes/api/generate-course-thumbnail'
 import { Route as CoursesIndexRouteImport } from './routes/courses.index'
 import { Route as CoursesSlugRouteImport } from './routes/courses.$slug'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard.index'
 import { Route as AuthenticatedDashboardPaymentsRouteImport } from './routes/_authenticated/dashboard.payments'
+import { Route as ApiCourseCoversSplatRouteImport } from './routes/api/course-covers/$'
 import { Route as AuthenticatedDashboardLearnSlugRouteImport } from './routes/_authenticated/dashboard.learn.$slug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -68,6 +70,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiGenerateCourseThumbnailRoute =
+  ApiGenerateCourseThumbnailRouteImport.update({
+    id: '/api/generate-course-thumbnail',
+    path: '/api/generate-course-thumbnail',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const CoursesIndexRoute = CoursesIndexRouteImport.update({
   id: '/courses/',
   path: '/courses/',
@@ -90,6 +98,11 @@ const AuthenticatedDashboardPaymentsRoute =
     path: '/payments',
     getParentRoute: () => AuthenticatedDashboardRoute,
   } as any)
+const ApiCourseCoversSplatRoute = ApiCourseCoversSplatRouteImport.update({
+  id: '/api/course-covers/$',
+  path: '/api/course-covers/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedDashboardLearnSlugRoute =
   AuthenticatedDashboardLearnSlugRouteImport.update({
     id: '/learn/$slug',
@@ -106,9 +119,11 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
+  '/api/generate-course-thumbnail': typeof ApiGenerateCourseThumbnailRoute
   '/courses/$slug': typeof CoursesSlugRoute
   '/courses/': typeof CoursesIndexRoute
   '/dashboard/payments': typeof AuthenticatedDashboardPaymentsRoute
+  '/api/course-covers/$': typeof ApiCourseCoversSplatRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/dashboard/learn/$slug': typeof AuthenticatedDashboardLearnSlugRoute
 }
@@ -120,9 +135,11 @@ export interface FileRoutesByTo {
   '/pro': typeof ProRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/api/generate-course-thumbnail': typeof ApiGenerateCourseThumbnailRoute
   '/courses/$slug': typeof CoursesSlugRoute
   '/courses': typeof CoursesIndexRoute
   '/dashboard/payments': typeof AuthenticatedDashboardPaymentsRoute
+  '/api/course-covers/$': typeof ApiCourseCoversSplatRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/dashboard/learn/$slug': typeof AuthenticatedDashboardLearnSlugRoute
 }
@@ -137,9 +154,11 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
+  '/api/generate-course-thumbnail': typeof ApiGenerateCourseThumbnailRoute
   '/courses/$slug': typeof CoursesSlugRoute
   '/courses/': typeof CoursesIndexRoute
   '/_authenticated/dashboard/payments': typeof AuthenticatedDashboardPaymentsRoute
+  '/api/course-covers/$': typeof ApiCourseCoversSplatRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/dashboard/learn/$slug': typeof AuthenticatedDashboardLearnSlugRoute
 }
@@ -154,9 +173,11 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/dashboard'
+    | '/api/generate-course-thumbnail'
     | '/courses/$slug'
     | '/courses/'
     | '/dashboard/payments'
+    | '/api/course-covers/$'
     | '/dashboard/'
     | '/dashboard/learn/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -168,9 +189,11 @@ export interface FileRouteTypes {
     | '/pro'
     | '/register'
     | '/reset-password'
+    | '/api/generate-course-thumbnail'
     | '/courses/$slug'
     | '/courses'
     | '/dashboard/payments'
+    | '/api/course-covers/$'
     | '/dashboard'
     | '/dashboard/learn/$slug'
   id:
@@ -184,9 +207,11 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/_authenticated/dashboard'
+    | '/api/generate-course-thumbnail'
     | '/courses/$slug'
     | '/courses/'
     | '/_authenticated/dashboard/payments'
+    | '/api/course-covers/$'
     | '/_authenticated/dashboard/'
     | '/_authenticated/dashboard/learn/$slug'
   fileRoutesById: FileRoutesById
@@ -200,8 +225,10 @@ export interface RootRouteChildren {
   ProRoute: typeof ProRoute
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiGenerateCourseThumbnailRoute: typeof ApiGenerateCourseThumbnailRoute
   CoursesSlugRoute: typeof CoursesSlugRoute
   CoursesIndexRoute: typeof CoursesIndexRoute
+  ApiCourseCoversSplatRoute: typeof ApiCourseCoversSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -269,6 +296,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/generate-course-thumbnail': {
+      id: '/api/generate-course-thumbnail'
+      path: '/api/generate-course-thumbnail'
+      fullPath: '/api/generate-course-thumbnail'
+      preLoaderRoute: typeof ApiGenerateCourseThumbnailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/courses/': {
       id: '/courses/'
       path: '/courses'
@@ -296,6 +330,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/payments'
       preLoaderRoute: typeof AuthenticatedDashboardPaymentsRouteImport
       parentRoute: typeof AuthenticatedDashboardRoute
+    }
+    '/api/course-covers/$': {
+      id: '/api/course-covers/$'
+      path: '/api/course-covers/$'
+      fullPath: '/api/course-covers/$'
+      preLoaderRoute: typeof ApiCourseCoversSplatRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/dashboard/learn/$slug': {
       id: '/_authenticated/dashboard/learn/$slug'
@@ -345,8 +386,10 @@ const rootRouteChildren: RootRouteChildren = {
   ProRoute: ProRoute,
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiGenerateCourseThumbnailRoute: ApiGenerateCourseThumbnailRoute,
   CoursesSlugRoute: CoursesSlugRoute,
   CoursesIndexRoute: CoursesIndexRoute,
+  ApiCourseCoversSplatRoute: ApiCourseCoversSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

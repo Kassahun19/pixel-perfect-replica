@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { courseQuery } from "@/lib/queries";
 import { FREE_LESSON_LIMIT, formatETB, isFreeLesson } from "@/lib/access";
 import { useAuth } from "@/lib/auth";
-import { courseImageUrl } from "@/lib/course-image";
+import { CourseThumbnail } from "@/components/site/CourseThumbnail";
 
 export const Route = createFileRoute("/courses/$slug")({
   loader: async ({ context, params }) => {
@@ -42,7 +42,6 @@ function CourseDetail() {
   if (!data) return null;
   const { course, lessons } = data;
   const totalMin = lessons.reduce((a, l) => a + l.duration_minutes, 0);
-  const imageUrl = courseImageUrl(course.image_url);
 
   return (
     <PublicLayout>
@@ -64,7 +63,13 @@ function CourseDetail() {
             </div>
           </div>
           <div className="animate-fade-up rounded-3xl border border-gold/30 bg-card p-3 text-card-foreground shadow-elegant [animation-delay:150ms]">
-            {imageUrl && <img src={imageUrl} alt={course.title} className="aspect-video w-full rounded-2xl object-cover" />}
+            <CourseThumbnail
+              imageUrl={course.image_url}
+              course={course}
+              alt={course.title}
+              loading="eager"
+              className="aspect-video w-full rounded-2xl"
+            />
             <div className="p-5">
               <p className="text-sm text-muted-foreground">First {FREE_LESSON_LIMIT} videos free · Full course</p>
               <p className="font-display text-4xl font-semibold text-primary">{formatETB()}</p>
