@@ -586,6 +586,21 @@ export type Database = {
         Returns: boolean
       }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      public_academy_profile: {
+        Args: never
+        Returns: {
+          address: string
+          description: string
+          email: string
+          facebook: string
+          linkedin: string
+          name: string
+          tagline: string
+          telegram: string
+          website: string
+          youtube: string
+        }[]
+      }
       teaches_student: {
         Args: { _instructor: string; _student: string }
         Returns: boolean
