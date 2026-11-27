@@ -21,7 +21,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ErrorBlock, LoadingBlock } from "@/components/dashboard/ui";
-import { ALL_SUBMENU_ITEMS, findNavMeta, OWNER_NAV_GROUPS } from "./nav-config";
+import {
+  COMBINED_SUBMENU_ITEMS,
+  findNavMeta,
+  getNavGroupsForRole,
+} from "./nav-config";
 import { useOwnerWorkspace } from "./useOwnerData";
 import { PrintableSheetDialog } from "./PrintableSheetDialog";
 import { OwnerOverview } from "./OwnerOverview";
@@ -43,10 +47,13 @@ import {
   ELearningResourcesModule,
   GradesReportCardsModule,
 } from "./CoursesResourcesModules";
+import { EnrollmentModules } from "./EnrollmentModules";
+import { CertificatesModule, ExamsAssessmentsModule } from "./ExamsCertificatesModules";
 import {
   FeesPaymentsModule,
   FinancialReportsModule,
   InvoicesReceiptsModule,
+  OutstandingBalancesModule,
   TransactionsLedgerModule,
 } from "./FinanceModules";
 import {
@@ -65,9 +72,10 @@ import {
   MyProfileModule,
   RolesPermissionsModule,
   SystemSettingsModule,
+  UserRolesModule,
 } from "./PlatformAccountModules";
 
-const VALID_SUBMENUS = new Set<string>(ALL_SUBMENU_ITEMS.map((i) => i.id));
+const VALID_SUBMENUS = new Set<string>(COMBINED_SUBMENU_ITEMS.map((i) => i.id));
 
 function readInitialMenu(): OwnerSubmenuId {
   if (typeof window === "undefined") return "overview";
@@ -93,41 +101,51 @@ export function OwnerDashboard({
   const data = useOwnerWorkspace(roles);
   const [activeMenu, setActiveMenu] = useState<OwnerSubmenuId>(readInitialMenu);
   const [expandedGroups, setExpandedGroups] = useState<Set<MenuGroupId>>(() => {
-    const initial = findNavMeta(readInitialMenu());
-    return new Set<MenuGroupId>(["dashboard", "academy", initial.groupId]);
+    const initial = findNavMeta(readInitialMenu(), role);
+    return new Set<MenuGroupId>(["dashboard", "academy", "users", "academics", initial.groupId]);
   });
   const [menuSearch, setMenuSearch] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   const isOwner = role === "owner" || roles.includes("owner");
+  const roleNavGroups = useMemo(() => getNavGroupsForRole(role), [role]);
+
   const visibleGroups = useMemo(() => {
     const q = menuSearch.trim().toLowerCase();
-    return OWNER_NAV_GROUPS.map((group) => {
-      const permitted = group.items.filter((item) => {
-        if (role === "owner") return true;
-        if (
-          item.id === "my-profile" ||
-          item.id === "account-settings" ||
-          item.id === "change-password"
-        ) {
-          return true;
-        }
-        return data.can(item.module, "view");
-      });
-      const matching = q
-        ? permitted.filter(
-            (i) =>
-              i.label.toLowerCase().includes(q) ||
-              group.label.toLowerCase().includes(q) ||
-              i.description.toLowerCase().includes(q),
-          )
-        : permitted;
-      return { ...group, items: matching };
-    }).filter((g) => g.items.length > 0);
-  }, [data, menuSearch, role]);
+    return roleNavGroups
+      .map((group) => {
+        const permitted = group.items.filter((item) => {
+          if (role === "owner") return true;
+          if (
+            item.id === "my-profile" ||
+            item.id === "account-settings" ||
+            item.id === "change-password"
+          ) {
+            return true;
+          }
+          return data.can(item.module, "view");
+        });
+        const matching = q
+          ? permitted.filter(
+              (i) =>
+                i.label.toLowerCase().includes(q) ||
+                group.label.toLowerCase().includes(q) ||
+                i.description.toLowerCase().includes(q),
+            )
+          : permitted;
+        return { ...group, items: matching };
+      })
+      .filter((g) => g.items.length > 0);
+  }, [data, menuSearch, role, roleNavGroups]);
 
-  const activeMeta = useMemo(() => findNavMeta(activeMenu), [activeMenu]);
+  const activeMeta = useMemo(() => findNavMeta(activeMenu, role), [activeMenu, role]);
+  const isAccountPage =
+    activeMenu === "my-profile" ||
+    activeMenu === "account-settings" ||
+    activeMenu === "change-password";
+  const hasActiveViewAccess =
+    isOwner || isAccountPage || data.can(activeMeta.module, "view");
 
   const unreadNotifications = useMemo(() => {
     const notifs = data.workspace?.notifications ?? [];
@@ -142,28 +160,36 @@ export function OwnerDashboard({
     () => data.db.payments.filter((p) => p.status === "pending").length,
     [data.db.payments],
   );
+  const pendingEnrollmentCount = useMemo(
+    () =>
+      (data.workspace?.enrollmentRequests ?? []).filter((r) => r.status === "pending").length,
+    [data.workspace?.enrollmentRequests],
+  );
   const openSupportCount = useMemo(
     () => data.db.messages.filter((m) => m.status !== "resolved").length,
     [data.db.messages],
   );
 
-  const navigateToMenu = useCallback((id: OwnerSubmenuId) => {
-    const meta = findNavMeta(id);
-    setActiveMenu(id);
-    setExpandedGroups((prev) => {
-      if (prev.has(meta.groupId)) return prev;
-      const next = new Set(prev);
-      next.add(meta.groupId);
-      return next;
-    });
-    setMobileOpen(false);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      if (id === "overview") url.searchParams.delete("menu");
-      else url.searchParams.set("menu", id);
-      window.history.replaceState(null, "", url.toString());
-    }
-  }, []);
+  const navigateToMenu = useCallback(
+    (id: OwnerSubmenuId) => {
+      const meta = findNavMeta(id, role);
+      setActiveMenu(id);
+      setExpandedGroups((prev) => {
+        if (prev.has(meta.groupId)) return prev;
+        const next = new Set(prev);
+        next.add(meta.groupId);
+        return next;
+      });
+      setMobileOpen(false);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        if (id === "overview") url.searchParams.delete("menu");
+        else url.searchParams.set("menu", id);
+        window.history.replaceState(null, "", url.toString());
+      }
+    },
+    [role],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -192,7 +218,15 @@ export function OwnerDashboard({
   }
 
   if (data.isLoading && !data.workspace) {
-    return <LoadingBlock label="Loading Ezana Academy Owner Dashboard…" />;
+    return (
+      <LoadingBlock
+        label={
+          role === "admin"
+            ? "Loading Ezana Academy Admin Dashboard…"
+            : "Loading Ezana Academy Owner Dashboard…"
+        }
+      />
+    );
   }
   if (data.error) {
     return <ErrorBlock error={data.error} />;
@@ -240,7 +274,7 @@ export function OwnerDashboard({
       </div>
 
       <nav
-        aria-label="Owner dashboard navigation"
+        aria-label={`${ROLE_LABEL[role]} dashboard navigation`}
         className="flex-1 space-y-1.5 overflow-y-auto pr-1"
       >
         {visibleGroups.map((group) => {
@@ -299,11 +333,13 @@ export function OwnerDashboard({
                     const badgeCount =
                       item.id === "fees-payments"
                         ? openPaymentsCount
-                        : item.id === "support"
-                          ? openSupportCount
-                          : item.id === "notifications"
-                            ? unreadNotifications
-                            : 0;
+                        : item.id === "enrollment-requests"
+                          ? pendingEnrollmentCount
+                          : item.id === "support"
+                            ? openSupportCount
+                            : item.id === "notifications"
+                              ? unreadNotifications
+                              : 0;
                     return (
                       <button
                         key={item.id}
@@ -372,7 +408,7 @@ export function OwnerDashboard({
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-80 p-4">
           <SheetHeader className="sr-only">
-            <SheetTitle>Owner Dashboard Menu</SheetTitle>
+            <SheetTitle>{ROLE_LABEL[role]} Dashboard Menu</SheetTitle>
           </SheetHeader>
           {sidebarContent}
         </SheetContent>
@@ -410,7 +446,7 @@ export function OwnerDashboard({
               onChange={(e) => navigateToMenu(e.target.value as OwnerSubmenuId)}
               className="hidden h-9 max-w-[210px] rounded-lg border border-border bg-background px-2.5 text-xs font-medium sm:block"
             >
-              {OWNER_NAV_GROUPS.map((g) => (
+              {visibleGroups.map((g) => (
                 <optgroup key={g.id} label={g.label}>
                   {g.items.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -453,44 +489,90 @@ export function OwnerDashboard({
 
         {/* Active Submenu Workspace */}
         <main className="min-w-0">
-          {activeMenu === "overview" && (
-            <OwnerOverview data={data} role={role} onNavigate={navigateToMenu} />
+          {!hasActiveViewAccess ? (
+            <ErrorBlock
+              error={
+                new Error(
+                  `Access restricted: your ${ROLE_LABEL[role]} role does not currently hold "${activeMeta.module}" view permission. Contact the Academy Owner to grant access.`,
+                )
+              }
+            />
+          ) : (
+            <>
+              {activeMenu === "overview" && (
+                <OwnerOverview data={data} role={role} onNavigate={navigateToMenu} />
+              )}
+              {activeMenu === "reports" && <OwnerReports data={data} />}
+              {activeMenu === "users" && <UserManagementModule data={data} />}
+              {(activeMenu === "students" || activeMenu === "student-records") && (
+                <StudentRecordsModule data={data} />
+              )}
+              {activeMenu === "instructors" && <InstructorManagementModule data={data} />}
+              {activeMenu === "parents" && <ParentManagementModule data={data} />}
+              {activeMenu === "user-roles" && <UserRolesModule data={data} isOwner={isOwner} />}
+              {activeMenu === "user-permissions" && (
+                <RolesPermissionsModule data={data} isOwner={isOwner} />
+              )}
+              {activeMenu === "academics" && <AcademicManagementModule data={data} />}
+              {activeMenu === "classes-sections" && (
+                <AcademicManagementModule data={data} initialTab="classes" />
+              )}
+              {activeMenu === "academic-years" && (
+                <AcademicManagementModule data={data} initialTab="years" />
+              )}
+              {activeMenu === "semesters-terms" && (
+                <AcademicManagementModule data={data} initialTab="terms" />
+              )}
+              {activeMenu === "courses" && <CourseManagementModule data={data} />}
+              {activeMenu === "subjects" && <SubjectsCategoriesModule data={data} />}
+              {activeMenu === "timetables" && <TimetablesModule data={data} />}
+              {activeMenu === "attendance" && <AttendanceTrackingModule data={data} />}
+              {activeMenu === "grades" && <GradesReportCardsModule data={data} />}
+              {activeMenu === "exams" && <ExamsAssessmentsModule data={data} />}
+              {activeMenu === "resources" && <ELearningResourcesModule data={data} />}
+              {activeMenu === "certificates" && <CertificatesModule data={data} />}
+              {activeMenu === "course-enrollment" && (
+                <EnrollmentModules data={data} initialTab="enrollments" />
+              )}
+              {activeMenu === "student-registration" && (
+                <EnrollmentModules data={data} initialTab="registration" />
+              )}
+              {activeMenu === "enrollment-requests" && (
+                <EnrollmentModules data={data} initialTab="requests" />
+              )}
+              {activeMenu === "class-assignments" && (
+                <EnrollmentModules data={data} initialTab="classes" />
+              )}
+              {activeMenu === "fees-payments" && <FeesPaymentsModule data={data} />}
+              {activeMenu === "invoices" && <InvoicesReceiptsModule data={data} />}
+              {activeMenu === "transactions" && <TransactionsLedgerModule data={data} />}
+              {activeMenu === "outstanding-balances" && (
+                <OutstandingBalancesModule data={data} />
+              )}
+              {activeMenu === "financial-reports" && <FinancialReportsModule data={data} />}
+              {activeMenu === "parent-comm" && <ParentCommunicationModule data={data} />}
+              {activeMenu === "messages" && <MessagesModule data={data} />}
+              {activeMenu === "announcements" && <AnnouncementsModule data={data} />}
+              {activeMenu === "notifications" && <NotificationsModule data={data} />}
+              {activeMenu === "support" && <SupportFeedbackModule data={data} />}
+              {activeMenu === "roles-permissions" && (
+                <RolesPermissionsModule data={data} isOwner={isOwner} />
+              )}
+              {activeMenu === "system-settings" && (
+                <SystemSettingsModule data={data} isOwner={isOwner} />
+              )}
+              {activeMenu === "academy-profile" && (
+                <AcademyProfileModule data={data} isOwner={isOwner} />
+              )}
+              {activeMenu === "integrations" && (
+                <IntegrationsModule data={data} isOwner={isOwner} />
+              )}
+              {activeMenu === "audit-logs" && <AuditLogsModule data={data} />}
+              {activeMenu === "my-profile" && <MyProfileModule />}
+              {activeMenu === "account-settings" && <AccountSettingsModule data={data} />}
+              {activeMenu === "change-password" && <ChangePasswordModule />}
+            </>
           )}
-          {activeMenu === "reports" && <OwnerReports data={data} />}
-          {activeMenu === "users" && <UserManagementModule data={data} />}
-          {activeMenu === "students" && <StudentRecordsModule data={data} />}
-          {activeMenu === "instructors" && <InstructorManagementModule data={data} />}
-          {activeMenu === "parents" && <ParentManagementModule data={data} />}
-          {activeMenu === "academics" && <AcademicManagementModule data={data} />}
-          {activeMenu === "courses" && <CourseManagementModule data={data} />}
-          {activeMenu === "subjects" && <SubjectsCategoriesModule data={data} />}
-          {activeMenu === "timetables" && <TimetablesModule data={data} />}
-          {activeMenu === "attendance" && <AttendanceTrackingModule data={data} />}
-          {activeMenu === "grades" && <GradesReportCardsModule data={data} />}
-          {activeMenu === "resources" && <ELearningResourcesModule data={data} />}
-          {activeMenu === "fees-payments" && <FeesPaymentsModule data={data} />}
-          {activeMenu === "invoices" && <InvoicesReceiptsModule data={data} />}
-          {activeMenu === "transactions" && <TransactionsLedgerModule data={data} />}
-          {activeMenu === "financial-reports" && <FinancialReportsModule data={data} />}
-          {activeMenu === "parent-comm" && <ParentCommunicationModule data={data} />}
-          {activeMenu === "messages" && <MessagesModule data={data} />}
-          {activeMenu === "announcements" && <AnnouncementsModule data={data} />}
-          {activeMenu === "notifications" && <NotificationsModule data={data} />}
-          {activeMenu === "support" && <SupportFeedbackModule data={data} />}
-          {activeMenu === "roles-permissions" && (
-            <RolesPermissionsModule data={data} isOwner={isOwner} />
-          )}
-          {activeMenu === "system-settings" && (
-            <SystemSettingsModule data={data} isOwner={isOwner} />
-          )}
-          {activeMenu === "academy-profile" && (
-            <AcademyProfileModule data={data} isOwner={isOwner} />
-          )}
-          {activeMenu === "integrations" && <IntegrationsModule data={data} isOwner={isOwner} />}
-          {activeMenu === "audit-logs" && <AuditLogsModule data={data} />}
-          {activeMenu === "my-profile" && <MyProfileModule />}
-          {activeMenu === "account-settings" && <AccountSettingsModule data={data} />}
-          {activeMenu === "change-password" && <ChangePasswordModule />}
         </main>
       </div>
 

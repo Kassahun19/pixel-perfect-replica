@@ -90,6 +90,10 @@ export function OwnerOverview({
     }).length;
 
     const liveCourses = db.courses.filter((c) => c.status === "published").length;
+    const classesCount = (workspace?.classes ?? []).length;
+    const pendingEnrollmentRequests = (workspace?.enrollmentRequests ?? []).filter(
+      (r) => r.status === "pending",
+    ).length;
 
     return {
       counts,
@@ -102,6 +106,8 @@ export function OwnerOverview({
       openTickets,
       liveCourses,
       totalCourses: db.courses.length,
+      classesCount,
+      pendingEnrollmentRequests,
       enrollmentsCount: db.enrollments.length,
     };
   }, [db, workspace]);
@@ -197,11 +203,11 @@ export function OwnerOverview({
           index={1}
         />
         <StatCard
-          label="Courses & Enrollments"
+          label="Courses, Classes & Enrollments"
           value={<span className="tabular-nums">{stats.enrollmentsCount}</span>}
           icon={BookOpen}
           tone="deep"
-          hint={`${stats.liveCourses} published of ${stats.totalCourses} courses`}
+          hint={`${stats.liveCourses}/${stats.totalCourses} courses · ${stats.classesCount} classes`}
           index={2}
         />
         <StatCard
@@ -416,6 +422,23 @@ export function OwnerOverview({
           actions={<span className="text-xs text-muted-foreground">Live priorities</span>}
         >
           <div className="space-y-2.5">
+            <button
+              type="button"
+              onClick={() => onNavigate("enrollment-requests")}
+              className="flex w-full items-center justify-between rounded-xl border border-border p-3 text-left transition-colors hover:bg-secondary/50"
+            >
+              <div className="flex items-center gap-3">
+                <GraduationCap className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="text-sm font-semibold">Pending Enrollment Requests</p>
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    {stats.pendingEnrollmentRequests} applications awaiting review
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+
             <button
               type="button"
               onClick={() => onNavigate("fees-payments")}

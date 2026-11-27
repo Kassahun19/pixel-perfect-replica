@@ -2,6 +2,8 @@ import type { AppRole } from "@/lib/auth";
 import type {
   AttendanceRecord,
   CourseRow,
+  ExamAssessment,
+  ExamSubmission,
   FeePlan,
   FeeStatus,
   GradeEntry,
@@ -27,7 +29,10 @@ export const ALL_PERMISSION_MODULES: PermissionModule[] = [
   "timetables",
   "attendance",
   "grades",
+  "exams",
   "resources",
+  "certificates",
+  "enrollments",
   "finance",
   "communication",
   "platform",
@@ -104,6 +109,7 @@ export function createDefaultRolePermissions(): RolePermissionMatrix {
       approve: false,
     },
     grades: { view: true, create: true, edit: true, delete: false, export: true, approve: false },
+    exams: { view: true, create: true, edit: true, delete: false, export: true, approve: false },
     resources: {
       view: true,
       create: true,
@@ -112,6 +118,8 @@ export function createDefaultRolePermissions(): RolePermissionMatrix {
       export: false,
       approve: false,
     },
+    certificates: readOnlyPerms(false),
+    enrollments: readOnlyPerms(false),
     finance: nonePerms(),
     communication: {
       view: true,
@@ -146,7 +154,9 @@ export function createDefaultRolePermissions(): RolePermissionMatrix {
       m === "courses" ||
       m === "resources" ||
       m === "grades" ||
-      m === "timetables"
+      m === "timetables" ||
+      m === "exams" ||
+      m === "certificates"
         ? readOnlyPerms(false)
         : nonePerms(),
     ]),
@@ -401,6 +411,39 @@ export function maskSecret(value: string): string {
   if (!trimmed) return "";
   if (trimmed.length <= 4) return "••••";
   return `••••••••${trimmed.slice(-4)}`;
+}
+
+export function nextCertificateCode(
+  existingCodes: string[],
+  year = new Date().getFullYear(),
+): string {
+  const prefix = `EZN-CERT-${year}-`;
+  let maxSeq = 0;
+  for (const code of existingCodes) {
+    if (code.startsWith(prefix)) {
+      const parsed = Number.parseInt(code.slice(prefix.length), 10);
+      if (Number.isFinite(parsed) && parsed > maxSeq) maxSeq = parsed;
+    }
+  }
+  return `${prefix}${String(maxSeq + 1).padStart(4, "0")}`;
+}
+
+export function computeExamStats(exam: ExamAssessment, submissions: ExamSubmission[]) {
+  const matching = submissions.filter((s) => s.examId === exam.id);
+  const graded = matching.filter((s) => s.status === "graded");
+  const passed = graded.filter((s) => s.score >= exam.passingScore).length;
+  const averageScore =
+    graded.length > 0
+      ? Math.round((graded.reduce((sum, s) => sum + s.score, 0) / graded.length) * 10) / 10
+      : 0;
+  const passRate = graded.length > 0 ? Math.round((passed / graded.length) * 1000) / 10 : 0;
+  return {
+    totalSubmissions: matching.length,
+    gradedCount: graded.length,
+    passedCount: passed,
+    averageScore,
+    passRate,
+  };
 }
 
 export function paginateRows<T>(rows: T[], page: number, pageSize: number) {

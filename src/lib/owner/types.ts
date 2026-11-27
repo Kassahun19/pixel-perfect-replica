@@ -6,18 +6,31 @@ export type OwnerSubmenuId =
   | "reports"
   | "users"
   | "students"
+  | "student-records"
   | "instructors"
   | "parents"
+  | "user-roles"
+  | "user-permissions"
   | "academics"
+  | "classes-sections"
+  | "academic-years"
+  | "semesters-terms"
   | "courses"
   | "subjects"
   | "timetables"
   | "attendance"
   | "grades"
+  | "exams"
   | "resources"
+  | "certificates"
+  | "course-enrollment"
+  | "student-registration"
+  | "enrollment-requests"
+  | "class-assignments"
   | "fees-payments"
   | "invoices"
   | "transactions"
+  | "outstanding-balances"
   | "financial-reports"
   | "parent-comm"
   | "messages"
@@ -34,7 +47,16 @@ export type OwnerSubmenuId =
   | "change-password";
 
 export type MenuGroupId =
-  "dashboard" | "reports" | "academy" | "finance" | "communication" | "platform" | "account";
+  | "dashboard"
+  | "reports"
+  | "users"
+  | "academics"
+  | "enrollments"
+  | "academy"
+  | "finance"
+  | "communication"
+  | "platform"
+  | "account";
 
 export type PermissionModule =
   | "overview"
@@ -49,7 +71,10 @@ export type PermissionModule =
   | "timetables"
   | "attendance"
   | "grades"
+  | "exams"
   | "resources"
+  | "certificates"
+  | "enrollments"
   | "finance"
   | "communication"
   | "platform"
@@ -378,6 +403,103 @@ export interface AccountPreferences {
   weeklyExecutiveSummary: boolean;
 }
 
+export type EnrollmentRequestStatus = "pending" | "approved" | "rejected";
+
+export interface EnrollmentRequest {
+  id: string;
+  studentId: string;
+  courseId: string;
+  classSectionId: string | null;
+  requestedBy: string | null;
+  notes: string;
+  status: EnrollmentRequestStatus;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNote: string;
+  createdAt: string;
+}
+
+export interface EnrollmentMeta {
+  enrollmentKey: string;
+  status: "active" | "completed" | "suspended";
+  updatedAt: string;
+  notes: string;
+}
+
+export interface ExamQuestion {
+  id: string;
+  prompt: string;
+  questionType: "multiple_choice" | "short_answer" | "practical";
+  options: string[];
+  correctAnswer: string;
+  points: number;
+}
+
+export interface ExamAssessment {
+  id: string;
+  title: string;
+  courseId: string;
+  termId: string | null;
+  examType: "quiz" | "midterm" | "final" | "practical" | "assignment";
+  scheduledDate: string;
+  startTime: string;
+  durationMinutes: number;
+  maxScore: number;
+  passingScore: number;
+  instructions: string;
+  questions: ExamQuestion[];
+  status: "draft" | "scheduled" | "active" | "completed";
+  createdAt: string;
+}
+
+export interface ExamSubmission {
+  id: string;
+  examId: string;
+  studentId: string;
+  score: number;
+  status: "pending" | "submitted" | "graded";
+  submittedAt: string | null;
+  gradedAt: string | null;
+  feedback: string;
+}
+
+export interface CertificateTemplate {
+  id: string;
+  name: string;
+  title: string;
+  subtitle: string;
+  bodyText: string;
+  signatoryName: string;
+  signatoryTitle: string;
+  accentColor: string;
+  isDefault: boolean;
+}
+
+export interface IssuedCertificate {
+  id: string;
+  certificateCode: string;
+  studentId: string;
+  courseId: string;
+  templateId: string;
+  completionPercent: number;
+  finalGrade: string;
+  issuedAt: string;
+  issuedBy: string | null;
+  status: "issued" | "revoked";
+  notes: string;
+}
+
+export interface PaymentReminder {
+  id: string;
+  studentId: string;
+  feePlanId: string | null;
+  amountDue: number;
+  channel: "notification" | "parent_message";
+  sentBy: string;
+  sentAt: string;
+  note: string;
+}
+
 export interface OwnerWorkspaceState {
   academicYears: AcademicYear[];
   terms: AcademicTerm[];
@@ -406,6 +528,13 @@ export interface OwnerWorkspaceState {
   academyExt: AcademyProfileExt;
   integrations: IntegrationConfig[];
   accountPrefsByUser: Record<string, AccountPreferences>;
+  enrollmentRequests: EnrollmentRequest[];
+  enrollmentMeta: Record<string, EnrollmentMeta>;
+  exams: ExamAssessment[];
+  examSubmissions: ExamSubmission[];
+  certificateTemplates: CertificateTemplate[];
+  issuedCertificates: IssuedCertificate[];
+  paymentReminders: PaymentReminder[];
 }
 
 export type ProfileRow = Tables<"profiles">;

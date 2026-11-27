@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -55,11 +55,21 @@ import type { OwnerDataHandle } from "./useOwnerData";
 /* 3.5 ACADEMIC MANAGEMENT                                                    */
 /* ========================================================================== */
 
-export function AcademicManagementModule({ data }: { data: OwnerDataHandle }) {
+export type AcademicTab = "years" | "terms" | "departments" | "classes" | "calendar";
+
+export function AcademicManagementModule({
+  data,
+  initialTab = "years",
+}: {
+  data: OwnerDataHandle;
+  initialTab?: AcademicTab;
+}) {
   const { db, workspace, maps, mutateWorkspace, can, mutating } = data;
-  const [tab, setTab] = useState<"years" | "terms" | "departments" | "classes" | "calendar">(
-    "years",
-  );
+  const [tab, setTab] = useState<AcademicTab>(initialTab);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   const years = workspace?.academicYears ?? [];
   const terms = workspace?.terms ?? [];

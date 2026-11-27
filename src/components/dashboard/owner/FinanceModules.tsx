@@ -3,6 +3,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { toast } from "sonner";
 import {
   ArrowDownToLine,
+  Bell,
   CheckCircle2,
   CircleDollarSign,
   CreditCard,
@@ -12,6 +13,7 @@ import {
   Receipt,
   RotateCcw,
   Search,
+  Send,
   Trash2,
   Wallet,
 } from "lucide-react";
@@ -1250,3 +1252,382 @@ export function FinancialReportsModule({ data }: { data: OwnerDataHandle }) {
     </div>
   );
 }
+
+/* ========================================================================== */
+/* 4.5 OUTSTANDING BALANCES                                                   */
+/* ========================================================================== */
+
+export function OutstandingBalancesModule({ data }: { data: OwnerDataHandle }) {
+  const { db, workspace, maps, mutateWorkspace, setPrintable, can, mutating } = data;
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [payTarget, setPayTarget] = useState<FeePlan | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [reminderTarget, setReminderTarget] = useState<{
+    studentId: string;
+    feePlanId: string | null;
+    amountDue: number;
+    studentName: string;
+  } | null>(null);
+  const [reminderNote, setReminderNote] = useState("");
+
+  const outstandingPlans = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (workspace?.feePlans ?? [])
+      .map((fee) => {
+        const balance = computeFeeBalance(fee.amount, fee.discount, fee.paidAmount);
+        const student = maps.profilesById.get(fee.studentId);
+        const parentLink = db.parentLinks.find((l) => l.student_id === fee.studentId);
+        return {
+          ...fee,
+          balance,
+          studentName: student ? displayName(student) : "Student",
+          studentEmail: student?.email ?? "",
+          courseTitle: fee.courseId ? (maps.coursesById.get(fee.courseId)?.title ?? "Course") : "General",
+          parentId: parentLink?.parent_id ?? null,
+        };
+      })
+      .filter((row) => {
+        if (row.balance <= 0) return false;
+        if (statusFilter !== "all" && row.status !== statusFilter) return false;
+        if (!q) return true;
+        return `${row.studentName} ${row.studentEmail} ${row.title} ${row.courseTitle}`
+          .toLowerCase()
+          .includes(q);
+      });
+  }, [workspace?.feePlans, maps, db.parentLinks, search, statusFilter]);
+
+  const pendingPayments = useMemo(
+    () => db.payments.filter((p) => p.status === "pending"),
+    [db.payments],
+  );
+
+  const summary = useMemo(() => {
+    const feeOutstanding = outstandingPlans.reduce((s, r) => s + r.balance, 0);
+    const overdueAmount = outstandingPlans
+      .filter((r) => r.status === "overdue")
+      .reduce((s, r) => s + r.balance, 0);
+    const pendingAmount = pendingPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
+    return {
+      totalOutstanding: feeOutstanding + pendingAmount,
+      overdueAmount,
+      overdueCount: outstandingPlans.filter((r) => r.status === "overdue").length,
+      remindersSent: (workspace?.paymentReminders ?? []).length,
+    };
+  }, [outstandingPlans, pendingPayments, workspace?.paymentReminders]);
+
+  function exportOutstanding() {
+    if (!outstandingPlans.length) {
+      toast.error("No outstanding balances to export.");
+      return;
+    }
+    downloadExcelXls(
+      "ezana-outstanding-balances.xls",
+      "Outstanding Balances",
+      outstandingPlans.map((r) => ({
+        Student: r.studentName,
+        Email: r.studentEmail,
+        FeeTitle: r.title,
+        Course: r.courseTitle,
+        NetAmountETB: Math.max(0, r.amount - r.discount),
+        PaidETB: r.paidAmount,
+        BalanceDueETB: r.balance,
+        DueDate: r.dueDate,
+        Status: r.status,
+      })),
+      "Ezana Academy — Outstanding Balances",
+    );
+    toast.success("Outstanding balance report downloaded");
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Outstanding Balances"
+        description="Track unpaid, partial, and overdue student balances, record settlements, and send payment reminders."
+        actions={
+          can("finance", "export") && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={exportOutstanding}>
+                <ArrowDownToLine className="h-4 w-4" /> Export Excel
+              </Button>
+              <Button
+                size="sm"
+                variant="emerald"
+                onClick={() =>
+                  setPrintable({
+                    title: "Outstanding Student Balances Report",
+                    subtitle: `${outstandingPlans.length} unpaid or overdue accounts`,
+                    meta: [
+                      { label: "Total Outstanding", value: formatETB(summary.totalOutstanding) },
+                      { label: "Overdue Amount", value: formatETB(summary.overdueAmount) },
+                    ],
+                    columns: ["Student", "Fee", "Course", "Paid", "Balance Due", "Due Date", "Status"],
+                    rows: outstandingPlans.map((r) => [
+                      r.studentName,
+                      r.title,
+                      r.courseTitle,
+                      formatETB(r.paidAmount),
+                      formatETB(r.balance),
+                      r.dueDate,
+                      r.status,
+                    ]),
+                  })
+                }
+              >
+                <Printer className="h-4 w-4" /> Export PDF
+              </Button>
+            </div>
+          )
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Total Outstanding"
+          value={formatETB(summary.totalOutstanding)}
+          icon={CircleDollarSign}
+          tone="deep"
+          index={0}
+        />
+        <StatCard
+          label="Overdue Balance"
+          value={formatETB(summary.overdueAmount)}
+          icon={Wallet}
+          tone="gold"
+          hint={`${summary.overdueCount} overdue accounts`}
+          index={1}
+        />
+        <StatCard
+          label="Pending Receipt Reviews"
+          value={pendingPayments.length}
+          icon={Receipt}
+          index={2}
+        />
+        <StatCard
+          label="Reminders Sent"
+          value={summary.remindersSent}
+          icon={Bell}
+          tone="plain"
+          index={3}
+        />
+      </div>
+
+      <Panel title="Unpaid & Overdue Fee Balances">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search student or fee title…"
+              className="pl-9"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="all">All Outstanding</option>
+            <option value="overdue">Overdue Only</option>
+            <option value="partial">Partial Only</option>
+            <option value="unpaid">Unpaid Only</option>
+          </select>
+        </div>
+
+        {outstandingPlans.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Student</TableHead>
+                <TableHead>Fee & Course</TableHead>
+                <TableHead>Paid / Balance Due</TableHead>
+                <TableHead>Due Date & Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {outstandingPlans.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell>
+                    <p className="font-semibold">{row.studentName}</p>
+                    <p className="text-xs text-muted-foreground">{row.studentEmail}</p>
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-medium">{row.title}</p>
+                    <p className="text-xs text-muted-foreground">{row.courseTitle}</p>
+                  </TableCell>
+                  <TableCell className="text-xs tabular-nums">
+                    <p className="text-muted-foreground">Paid: {formatETB(row.paidAmount)}</p>
+                    <p className="font-bold text-destructive">Due: {formatETB(row.balance)}</p>
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-mono text-xs text-muted-foreground">{row.dueDate}</p>
+                    <Badge
+                      variant={
+                        row.status === "overdue"
+                          ? "destructive"
+                          : row.status === "partial"
+                            ? "gold"
+                            : "warning"
+                      }
+                      className="mt-1 capitalize"
+                    >
+                      {row.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1.5">
+                      {can("finance", "edit") && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setPayTarget(row);
+                              setPayAmount(String(row.balance));
+                            }}
+                          >
+                            Record Payment
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="emerald"
+                            onClick={() => {
+                              setReminderTarget({
+                                studentId: row.studentId,
+                                feePlanId: row.id,
+                                amountDue: row.balance,
+                                studentName: row.studentName,
+                              });
+                              setReminderNote(
+                                `Friendly reminder: ${formatETB(row.balance)} is due for ${row.title} (due ${row.dueDate}).`,
+                              );
+                            }}
+                          >
+                            <Send className="h-3.5 w-3.5" /> Remind
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <EmptyState
+            title="No outstanding balances"
+            text="All assigned fee schedules are settled."
+            icon={CheckCircle2}
+          />
+        )}
+      </Panel>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={!!payTarget} onOpenChange={(o) => !o && setPayTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Record Payment Settlement</DialogTitle>
+          </DialogHeader>
+          {payTarget && (
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const added = Number(payAmount);
+                if (!Number.isFinite(added) || added <= 0) {
+                  toast.error("Enter a valid payment amount.");
+                  return;
+                }
+                void mutateWorkspace(
+                  {
+                    type: "upsert_fee_plan",
+                    payload: {
+                      ...payTarget,
+                      paidAmount: payTarget.paidAmount + added,
+                    },
+                  },
+                  "Payment recorded on student fee plan",
+                ).then(() => setPayTarget(null));
+              }}
+            >
+              <label className="block space-y-1 text-sm font-medium">
+                Payment Amount Received (ETB)
+                <Input
+                  type="number"
+                  min={1}
+                  required
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                />
+              </label>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setPayTarget(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="emerald" disabled={mutating}>
+                  Save Payment
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Reminder Dialog */}
+      <Dialog open={!!reminderTarget} onOpenChange={(o) => !o && setReminderTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Payment Reminder — {reminderTarget?.studentName}</DialogTitle>
+          </DialogHeader>
+          {reminderTarget && (
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const parentId =
+                  db.parentLinks.find((l) => l.student_id === reminderTarget.studentId)
+                    ?.parent_id ?? null;
+                void mutateWorkspace(
+                  {
+                    type: "send_payment_reminder",
+                    payload: {
+                      studentId: reminderTarget.studentId,
+                      feePlanId: reminderTarget.feePlanId,
+                      amountDue: reminderTarget.amountDue,
+                      channel: parentId ? "parent_message" : "notification",
+                      parentId,
+                      note: reminderNote.trim(),
+                    },
+                  },
+                  "Payment reminder sent",
+                ).then(() => setReminderTarget(null));
+              }}
+            >
+              <label className="block space-y-1 text-sm font-medium">
+                Reminder Message
+                <Textarea
+                  required
+                  rows={3}
+                  value={reminderNote}
+                  onChange={(e) => setReminderNote(e.target.value)}
+                />
+              </label>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setReminderTarget(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="emerald" disabled={mutating}>
+                  <Send className="h-4 w-4" /> Send Reminder
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+

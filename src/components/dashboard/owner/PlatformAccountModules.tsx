@@ -50,6 +50,201 @@ import { EmptyState, PageHeader, Pager, Panel } from "@/components/dashboard/ui"
 import type { OwnerDataHandle } from "./useOwnerData";
 
 /* ========================================================================== */
+/* 6.0 USER ROLES                                                             */
+/* ========================================================================== */
+
+const ROLE_DESCRIPTIONS: Record<AppRole, { level: string; scope: string }> = {
+  owner: {
+    level: "Full System Authority",
+    scope: "Unrestricted access across academy settings, permissions, financials, users, and audit controls.",
+  },
+  admin: {
+    level: "Operations Administrator",
+    scope: "Manages day-to-day users, academics, enrollments, finance, and communications within Owner-assigned permissions.",
+  },
+  instructor: {
+    level: "Academic Faculty",
+    scope: "Manages assigned courses, lessons, student attendance, grades, exams, and course announcements.",
+  },
+  parent: {
+    level: "Guardian Portal",
+    scope: "Monitors linked children's attendance, grades, report cards, tuition balances, and messages.",
+  },
+  student: {
+    level: "Learner Portal",
+    scope: "Accesses enrolled courses, video lessons, assessments, progress tracking, and payment receipts.",
+  },
+};
+
+export function UserRolesModule({
+  data,
+  isOwner,
+}: {
+  data: OwnerDataHandle;
+  isOwner: boolean;
+}) {
+  const { db, maps, callUserApi, can, mutating } = data;
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+
+  const canAssignRoles = isOwner || can("users", "edit");
+
+  const roleCounts = useMemo(() => {
+    const counts: Record<AppRole, number> = {
+      owner: 0,
+      admin: 0,
+      instructor: 0,
+      parent: 0,
+      student: 0,
+    };
+    for (const r of db.roles) {
+      counts[r.role] = (counts[r.role] ?? 0) + 1;
+    }
+    return counts;
+  }, [db.roles]);
+
+  const filteredUsers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return db.profiles.filter((p) => {
+      const assigned = maps.rolesByUser.get(p.id) ?? [];
+      if (roleFilter !== "all" && !assigned.includes(roleFilter as AppRole)) return false;
+      if (!q) return true;
+      return `${displayName(p)} ${p.email}`.toLowerCase().includes(q);
+    });
+  }, [db.profiles, maps.rolesByUser, search, roleFilter]);
+
+  async function changePrimaryRole(userId: string, newRole: AppRole) {
+    const target = maps.profilesById.get(userId);
+    if (!target) return;
+    const current = maps.rolesByUser.get(userId) ?? [];
+    if (!isOwner && (current.includes("owner") || newRole === "owner")) {
+      toast.error("Only the Academy Owner can assign or modify Owner accounts.");
+      return;
+    }
+    await callUserApi(
+      {
+        action: "update",
+        user_id: userId,
+        first_name: target.first_name || "User",
+        last_name: target.last_name || "Account",
+        phone: target.phone,
+        bio: target.bio,
+        status: target.status,
+        roles: [newRole],
+      },
+      `Assigned ${ROLE_LABEL[newRole]} role to ${displayName(target)}`,
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="User Roles"
+        description="Inspect platform role access levels and assign roles according to Owner-granted authority."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {ROLE_ORDER.map((r) => (
+          <div key={r} className="rounded-xl border border-border bg-card p-4 shadow-soft">
+            <div className="flex items-center justify-between">
+              <Badge variant={r === "owner" ? "gold" : "outline"}>{ROLE_LABEL[r]}</Badge>
+              <span className="font-display text-xl font-bold tabular-nums">{roleCounts[r]}</span>
+            </div>
+            <p className="mt-2 text-xs font-semibold text-foreground">{ROLE_DESCRIPTIONS[r].level}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{ROLE_DESCRIPTIONS[r].scope}</p>
+          </div>
+        ))}
+      </div>
+
+      <Panel title="Role Assignments">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search user name or email…"
+              className="pl-9"
+            />
+          </div>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="all">All Roles</option>
+            {ROLE_ORDER.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABEL[r]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>User</TableHead>
+              <TableHead>Current Roles</TableHead>
+              <TableHead>Access Level</TableHead>
+              <TableHead className="text-right">Assign Role</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredUsers.slice(0, 25).map((person) => {
+              const assigned = maps.rolesByUser.get(person.id) ?? [];
+              const primary = assigned[0] ?? "student";
+              const isLocked = !isOwner && assigned.includes("owner");
+              return (
+                <TableRow key={person.id}>
+                  <TableCell>
+                    <p className="font-semibold">{displayName(person)}</p>
+                    <p className="text-xs text-muted-foreground">{person.email}</p>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {assigned.map((r) => (
+                        <Badge key={r} variant={r === "owner" ? "gold" : "outline"}>
+                          {ROLE_LABEL[r]}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {ROLE_DESCRIPTIONS[primary].level}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {isLocked ? (
+                      <Badge variant="muted">Owner protected</Badge>
+                    ) : canAssignRoles ? (
+                      <select
+                        aria-label={`Assign role for ${displayName(person)}`}
+                        disabled={mutating}
+                        value={primary}
+                        onChange={(e) => void changePrimaryRole(person.id, e.target.value as AppRole)}
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium"
+                      >
+                        {ROLE_ORDER.filter((r) => isOwner || r !== "owner").map((r) => (
+                          <option key={r} value={r}>
+                            {ROLE_LABEL[r]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Badge variant="muted">View only</Badge>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Panel>
+    </div>
+  );
+}
+
+/* ========================================================================== */
 /* 6.1 ROLES & PERMISSIONS                                                    */
 /* ========================================================================== */
 
@@ -60,16 +255,19 @@ export function RolesPermissionsModule({
   data: OwnerDataHandle;
   isOwner: boolean;
 }) {
-  const { workspace, mutateWorkspace, mutating } = data;
+  const { workspace, mutateWorkspace, can, mutating } = data;
   const [selectedRole, setSelectedRole] = useState<AppRole>("admin");
   const [draft, setDraft] = useState<RolePermissionMatrix | null>(null);
 
   const matrix = draft ?? workspace?.rolePermissions ?? createDefaultRolePermissions();
   const rolePerms = matrix[selectedRole];
-  const isEditingOwner = selectedRole === "owner";
+  const canDelegatedEdit = isOwner || can("platform", "edit");
+  const isProtectedRole =
+    selectedRole === "owner" || (!isOwner && selectedRole === "admin");
+  const canEditSelected = canDelegatedEdit && !isProtectedRole;
 
   function togglePerm(mod: PermissionModule, action: PermissionAction, value: boolean) {
-    if (!isOwner || isEditingOwner) return;
+    if (!canEditSelected) return;
     setDraft((prev) => {
       const base = prev ?? structuredClone(matrix);
       return {
@@ -86,8 +284,8 @@ export function RolesPermissionsModule({
   }
 
   async function saveMatrix() {
-    if (!isOwner) {
-      toast.error("Only the Academy Owner can update permissions.");
+    if (!canDelegatedEdit) {
+      toast.error("Permission editing requires Owner authority or delegated platform access.");
       return;
     }
     await mutateWorkspace(
@@ -100,10 +298,10 @@ export function RolesPermissionsModule({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Roles & Permissions"
-        description="Configure module and action permissions across all 5 academy roles. Changes are enforced by backend API guards."
+        title="User Roles & Permissions"
+        description="View and manage module and action permissions across academy roles. Changes are enforced by backend API guards."
         actions={
-          isOwner && (
+          canDelegatedEdit && (
             <div className="flex gap-2">
               {draft && (
                 <Button size="sm" variant="outline" onClick={() => setDraft(null)}>
@@ -139,10 +337,10 @@ export function RolesPermissionsModule({
       <Panel
         title={`${ROLE_LABEL[selectedRole]} Module Permissions`}
         actions={
-          isEditingOwner ? (
+          selectedRole === "owner" ? (
             <Badge variant="gold">Owner retains full system authority</Badge>
-          ) : !isOwner ? (
-            <Badge variant="muted">Owner edit only</Badge>
+          ) : !canEditSelected ? (
+            <Badge variant="muted">Owner authority required</Badge>
           ) : undefined
         }
       >
@@ -166,10 +364,10 @@ export function RolesPermissionsModule({
                     <input
                       type="checkbox"
                       aria-label={`${ROLE_LABEL[selectedRole]} ${mod} ${action}`}
-                      disabled={!isOwner || isEditingOwner}
+                      disabled={!canEditSelected}
                       checked={rolePerms?.[mod]?.[action] ?? false}
                       onChange={(e) => togglePerm(mod, action, e.target.checked)}
-                      className="h-4 w-4 cursor-pointer accent-emerald-700"
+                      className="h-4 w-4 cursor-pointer accent-emerald-700 disabled:cursor-not-allowed"
                     />
                   </TableCell>
                 ))}

@@ -5,7 +5,12 @@ import { toast } from "sonner";
 import { displayName, ROLE_LABEL } from "@/lib/auth";
 import { formatETB } from "@/lib/access";
 import { downloadCsv, downloadExcelXls } from "@/lib/export";
-import { computeGradeOutcome, paginateRows } from "@/lib/owner/logic";
+import {
+  computeAttendanceStats,
+  computeFeeBalance,
+  computeGradeOutcome,
+  paginateRows,
+} from "@/lib/owner/logic";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +25,13 @@ import {
 import { EmptyState, PageHeader, Pager, Panel, StatCard } from "@/components/dashboard/ui";
 import type { OwnerDataHandle } from "./useOwnerData";
 
-type ReportType = "academic" | "financial" | "attendance" | "enrollment" | "operational";
+type ReportType =
+  | "academic"
+  | "student"
+  | "financial"
+  | "attendance"
+  | "enrollment"
+  | "operational";
 
 export function OwnerReports({ data }: { data: OwnerDataHandle }) {
   const { db, workspace, maps, setPrintable, can } = data;
@@ -248,6 +259,80 @@ export function OwnerReports({ data }: { data: OwnerDataHandle }) {
       };
     }
 
+    if (reportType === "student") {
+      const students = db.profiles.filter((p) => {
+        if (!(maps.rolesByUser.get(p.id) ?? []).includes("student")) return false;
+        if (!inDateRange(p.created_at)) return false;
+        if (userFilter !== "all" && p.id !== userFilter) return false;
+        if (classStudentSet && !classStudentSet.has(p.id)) return false;
+        if (
+          courseFilter !== "all" &&
+          !db.enrollments.some((e) => e.user_id === p.id && e.course_id === courseFilter)
+        ) {
+          return false;
+        }
+        return true;
+      });
+
+      const rows = students.map((s) => {
+        const meta = workspace?.studentMeta[s.id];
+        const clsName = meta?.classSectionId
+          ? (maps.classesById.get(meta.classSectionId)?.name ?? "Assigned")
+          : "Unassigned";
+        const enrollments = db.enrollments.filter((e) => e.user_id === s.id).length;
+        const att = computeAttendanceStats(
+          (workspace?.attendance ?? []).filter((a) => a.personId === s.id),
+        );
+        const sGrades = (workspace?.grades ?? []).filter((g) => g.studentId === s.id);
+        const avgPct =
+          sGrades.length && defaultScale
+            ? `${Math.round(
+                sGrades.reduce(
+                  (sum, g) => sum + computeGradeOutcome(g.score, g.maxScore, defaultScale).percent,
+                  0,
+                ) / sGrades.length,
+              )}%`
+            : "—";
+        const due = (workspace?.feePlans ?? [])
+          .filter((f) => f.studentId === s.id)
+          .reduce((sum, f) => sum + computeFeeBalance(f.amount, f.discount, f.paidAmount), 0);
+
+        return {
+          Code: meta?.studentCode ?? `STU-${s.id.slice(0, 6).toUpperCase()}`,
+          Student: displayName(s),
+          Email: s.email,
+          Class: clsName,
+          Courses: enrollments,
+          Attendance: att.total ? `${att.attendanceRate}%` : "—",
+          AvgGrade: avgPct,
+          Balance: formatETB(due),
+          Status: s.status,
+        };
+      });
+
+      return {
+        title: "Student Directory & Performance Report",
+        subtitle: `${rows.length} student profiles matching filters`,
+        columns: ["Code", "Student", "Email", "Class", "Courses", "Attendance", "AvgGrade", "Balance", "Status"],
+        rows,
+        summary: [
+          { label: "Total Students", value: String(rows.length) },
+          {
+            label: "Active Students",
+            value: String(rows.filter((r) => r.Status === "active").length),
+          },
+          {
+            label: "Enrolled in Courses",
+            value: String(rows.filter((r) => r.Courses > 0).length),
+          },
+        ],
+        chartData: (workspace?.classes ?? []).map((cls) => ({
+          label: cls.sectionCode,
+          value: students.filter((s) => workspace?.studentMeta[s.id]?.classSectionId === cls.id).length,
+        })),
+      };
+    }
+
     // Operational
     const rows = db.profiles
       .filter((p) => {
@@ -376,6 +461,7 @@ export function OwnerReports({ data }: { data: OwnerDataHandle }) {
           [
             ["financial", "Financial Reports"],
             ["academic", "Academic Reports"],
+            ["student", "Student Reports"],
             ["attendance", "Attendance Reports"],
             ["enrollment", "Enrollment Reports"],
             ["operational", "Operational Reports"],

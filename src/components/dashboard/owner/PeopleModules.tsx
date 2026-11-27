@@ -58,7 +58,8 @@ import type { OwnerDataHandle } from "./useOwnerData";
 /* ========================================================================== */
 
 export function UserManagementModule({ data }: { data: OwnerDataHandle }) {
-  const { user, isStaff } = useAuth();
+  const { user, roles: callerRoles, isStaff } = useAuth();
+  const isCallerOwner = callerRoles.includes("owner");
   const { db, maps, callUserApi, can, mutating } = data;
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -260,6 +261,8 @@ export function UserManagementModule({ data }: { data: OwnerDataHandle }) {
               <TableBody>
                 {paged.items.map((person) => {
                   const assigned = maps.rolesByUser.get(person.id) ?? [];
+                  const targetIsOwner = assigned.includes("owner");
+                  const rowLocked = targetIsOwner && !isCallerOwner;
                   return (
                     <TableRow key={person.id}>
                       <TableCell>
@@ -295,61 +298,67 @@ export function UserManagementModule({ data }: { data: OwnerDataHandle }) {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex flex-wrap justify-end gap-1.5">
-                          {canEdit && (
+                          {rowLocked ? (
+                            <Badge variant="muted">Owner protected</Badge>
+                          ) : (
                             <>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openEdit(person)}
-                              >
-                                <Pencil className="h-3.5 w-3.5" /> Edit
-                              </Button>
-                              {person.status === "active" ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={mutating || person.id === user?.id}
-                                  onClick={() => void handleQuickStatus(person, "suspended")}
-                                >
-                                  Suspend
-                                </Button>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={mutating}
-                                  onClick={() => void handleQuickStatus(person, "active")}
-                                >
-                                  Activate
-                                </Button>
+                              {canEdit && (
+                                <>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openEdit(person)}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" /> Edit
+                                  </Button>
+                                  {person.status === "active" ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      disabled={mutating || person.id === user?.id}
+                                      onClick={() => void handleQuickStatus(person, "suspended")}
+                                    >
+                                      Suspend
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      disabled={mutating}
+                                      onClick={() => void handleQuickStatus(person, "active")}
+                                    >
+                                      Activate
+                                    </Button>
+                                  )}
+                                </>
+                              )}
+                              {canDelete && person.id !== user?.id && (
+                                <ConfirmButton
+                                  title={`Delete ${displayName(person)}?`}
+                                  description="This permanently removes the user account and role access."
+                                  confirmLabel="Delete user"
+                                  onConfirm={() =>
+                                    void callUserApi(
+                                      { action: "delete", user_id: person.id },
+                                      "User account removed",
+                                    )
+                                  }
+                                  trigger={
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-destructive hover:bg-destructive/10"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  }
+                                />
                               )}
                             </>
-                          )}
-                          {canDelete && person.id !== user?.id && (
-                            <ConfirmButton
-                              title={`Delete ${displayName(person)}?`}
-                              description="This permanently removes the user account and role access."
-                              confirmLabel="Delete user"
-                              onConfirm={() =>
-                                void callUserApi(
-                                  { action: "delete", user_id: person.id },
-                                  "User account removed",
-                                )
-                              }
-                              trigger={
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-destructive hover:bg-destructive/10"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              }
-                            />
                           )}
                         </div>
                       </TableCell>
@@ -430,7 +439,7 @@ export function UserManagementModule({ data }: { data: OwnerDataHandle }) {
                 onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value as AppRole }))}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                {ROLE_ORDER.map((r) => (
+                {ROLE_ORDER.filter((r) => isCallerOwner || r !== "owner").map((r) => (
                   <option key={r} value={r}>
                     {ROLE_LABEL[r]}
                   </option>
@@ -511,7 +520,7 @@ export function UserManagementModule({ data }: { data: OwnerDataHandle }) {
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Assigned Roles</Label>
               <div className="flex flex-wrap gap-2">
-                {ROLE_ORDER.map((r) => {
+                {ROLE_ORDER.filter((r) => isCallerOwner || r !== "owner").map((r) => {
                   const checked = editForm.roles.includes(r);
                   return (
                     <label

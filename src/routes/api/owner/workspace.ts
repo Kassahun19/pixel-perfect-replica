@@ -40,9 +40,13 @@ export const Route = createFileRoute("/api/owner/workspace")({
         const auth = await authorizeOwnerApi(request, perm.module, perm.action);
         if (!auth.ok) return auth.response;
 
-        if (mutation.type === "update_role_permissions" && !auth.roles.includes("owner")) {
+        if (
+          mutation.type === "update_role_permissions" &&
+          !auth.roles.includes("owner") &&
+          !auth.roles.includes("admin")
+        ) {
           return Response.json(
-            { error: "Only the Academy Owner can modify role permissions." },
+            { error: "Insufficient role authority to update permissions." },
             { status: 403 },
           );
         }
@@ -51,6 +55,7 @@ export const Route = createFileRoute("/api/owner/workspace")({
           const { state, auditAction, entity, entityId } = applyWorkspaceMutation(
             mutation,
             auth.userId,
+            auth.roles,
           );
           await recordServerAudit(auth.supabase, auth.userId, auditAction, entity, entityId, {
             module: perm.module,

@@ -3,6 +3,7 @@ import {
   ALL_PERMISSION_MODULES,
   buildReportCard,
   computeAttendanceStats,
+  computeExamStats,
   computeFeeBalance,
   computeFeeStatus,
   computeGradeOutcome,
@@ -10,12 +11,18 @@ import {
   detectTimetableConflicts,
   hasModulePermission,
   maskSecret,
+  nextCertificateCode,
   nextInvoiceNumber,
   paginateRows,
 } from "@/lib/owner/logic";
 import { applyWorkspaceMutation, resolvePermissionForMutation } from "@/lib/owner/store.server";
-import { ALL_SUBMENU_ITEMS, OWNER_NAV_GROUPS } from "@/components/dashboard/owner/nav-config";
-import type { GradingScale, TimetableSlot } from "@/lib/owner/types";
+import {
+  ADMIN_NAV_GROUPS,
+  ALL_ADMIN_SUBMENU_ITEMS,
+  ALL_SUBMENU_ITEMS,
+  OWNER_NAV_GROUPS,
+} from "@/components/dashboard/owner/nav-config";
+import type { ExamAssessment, ExamSubmission, GradingScale, TimetableSlot } from "@/lib/owner/types";
 
 const SAMPLE_SCALE: GradingScale = {
   id: "scale-1",
@@ -31,7 +38,7 @@ const SAMPLE_SCALE: GradingScale = {
 };
 
 describe("Owner Dashboard Navigation & RBAC", () => {
-  it("contains all 7 top-level groups and unique submenu IDs", () => {
+  it("contains all 7 top-level groups for Owner and 8 clean groups without numbers for Admin", () => {
     expect(OWNER_NAV_GROUPS).toHaveLength(7);
     const ids = ALL_SUBMENU_ITEMS.map((i) => i.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -39,6 +46,30 @@ describe("Owner Dashboard Navigation & RBAC", () => {
     expect(ids).toContain("reports");
     expect(ids).toContain("roles-permissions");
     expect(ids).toContain("change-password");
+
+    expect(ADMIN_NAV_GROUPS).toHaveLength(8);
+    const adminIds = ALL_ADMIN_SUBMENU_ITEMS.map((i) => i.id);
+    expect(new Set(adminIds).size).toBe(adminIds.length);
+    expect(adminIds).toContain("user-roles");
+    expect(adminIds).toContain("user-permissions");
+    expect(adminIds).toContain("classes-sections");
+    expect(adminIds).toContain("academic-years");
+    expect(adminIds).toContain("semesters-terms");
+    expect(adminIds).toContain("exams");
+    expect(adminIds).toContain("certificates");
+    expect(adminIds).toContain("course-enrollment");
+    expect(adminIds).toContain("student-registration");
+    expect(adminIds).toContain("enrollment-requests");
+    expect(adminIds).toContain("class-assignments");
+    expect(adminIds).toContain("outstanding-balances");
+
+    // Verify no numbers exist in any sidebar group or submenu label
+    for (const g of ADMIN_NAV_GROUPS) {
+      expect(g.label).not.toMatch(/\d/);
+      for (const item of g.items) {
+        expect(item.label).not.toMatch(/\d/);
+      }
+    }
   });
 
   it("grants Owner full permissions regardless of matrix state and restricts other roles cleanly", () => {
@@ -299,5 +330,135 @@ describe("Server Store Mutations & Permission Mapping", () => {
     const telebirr = integState.integrations.find((i) => i.id === "telebirr");
     expect(telebirr?.secretMask).toBe("••••••••4321");
     expect(JSON.stringify(integState)).not.toContain("tb_live_secret_4321");
+  });
+
+  it("handles enrollment requests, exam scoring, certificates, payment reminders, and Admin RBAC bounds", () => {
+    expect(nextCertificateCode(["EZN-CERT-2026-0001", "EZN-CERT-2026-0004"], 2026)).toBe(
+      "EZN-CERT-2026-0005",
+    );
+
+    const exam: ExamAssessment = {
+      id: "exam-1",
+      title: "Excel Final",
+      courseId: "c1",
+      termId: null,
+      examType: "final",
+      scheduledDate: "2026-11-30",
+      startTime: "09:00",
+      durationMinutes: 60,
+      maxScore: 100,
+      passingScore: 60,
+      instructions: "",
+      questions: [],
+      status: "active",
+      createdAt: new Date().toISOString(),
+    };
+    const subs: ExamSubmission[] = [
+      {
+        id: "s1",
+        examId: "exam-1",
+        studentId: "stu-1",
+        score: 80,
+        status: "graded",
+        submittedAt: null,
+        gradedAt: null,
+        feedback: "",
+      },
+      {
+        id: "s2",
+        examId: "exam-1",
+        studentId: "stu-2",
+        score: 50,
+        status: "graded",
+        submittedAt: null,
+        gradedAt: null,
+        feedback: "",
+      },
+    ];
+    const exStats = computeExamStats(exam, subs);
+    expect(exStats.averageScore).toBe(65);
+    expect(exStats.passRate).toBe(50);
+
+    const { state: reqState } = applyWorkspaceMutation(
+      {
+        type: "upsert_enrollment_request",
+        payload: {
+          id: "req-1",
+          studentId: "stu-1",
+          courseId: "22222222-2222-4222-8222-222222222201",
+          classSectionId: "class-bcs-a",
+          requestedBy: "admin-1",
+          notes: "Cohort A",
+        },
+      },
+      "admin-1",
+      ["admin"],
+    );
+    expect(reqState.enrollmentRequests.some((r) => r.id === "req-1" && r.status === "pending")).toBe(
+      true,
+    );
+
+    const { state: approvedState } = applyWorkspaceMutation(
+      {
+        type: "review_enrollment_request",
+        id: "req-1",
+        status: "approved",
+        reviewNote: "Approved by Admin",
+      },
+      "admin-1",
+      ["admin"],
+    );
+    expect(approvedState.enrollmentRequests.find((r) => r.id === "req-1")?.status).toBe("approved");
+    expect(
+      approvedState.classes.find((c) => c.id === "class-bcs-a")?.studentIds.includes("stu-1"),
+    ).toBe(true);
+
+    const { state: certState } = applyWorkspaceMutation(
+      {
+        type: "issue_certificate",
+        payload: {
+          id: "cert-1",
+          studentId: "stu-1",
+          courseId: "22222222-2222-4222-8222-222222222201",
+          templateId: "cert-default",
+          completionPercent: 100,
+          finalGrade: "A (95%)",
+          notes: "Honors",
+        },
+      },
+      "admin-1",
+      ["admin"],
+    );
+    expect(certState.issuedCertificates.find((c) => c.id === "cert-1")?.certificateCode).toMatch(
+      /^EZN-CERT-\d{4}-\d{4}$/,
+    );
+
+    const { state: remState } = applyWorkspaceMutation(
+      {
+        type: "send_payment_reminder",
+        payload: {
+          studentId: "stu-1",
+          feePlanId: null,
+          amountDue: 218,
+          channel: "notification",
+          note: "Tuition due",
+        },
+      },
+      "admin-1",
+      ["admin"],
+    );
+    expect(remState.paymentReminders.length).toBeGreaterThan(0);
+
+    // Delegated Admin cannot escalate admin or modify owner permissions
+    const escalated = createDefaultRolePermissions();
+    escalated.admin.platform.edit = true;
+    escalated.instructor.courses.delete = true;
+    const { state: rbacState } = applyWorkspaceMutation(
+      { type: "update_role_permissions", rolePermissions: escalated },
+      "admin-1",
+      ["admin"],
+    );
+    expect(rbacState.rolePermissions.admin.platform.edit).toBe(false);
+    expect(rbacState.rolePermissions.instructor.courses.delete).toBe(true);
   });
 });

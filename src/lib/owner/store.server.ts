@@ -11,6 +11,7 @@ import {
   detectTimetableConflicts,
   hasModulePermission,
   maskSecret,
+  nextCertificateCode,
   nextInvoiceNumber,
 } from "./logic";
 import type {
@@ -19,8 +20,13 @@ import type {
   AcademicYear,
   AccountPreferences,
   AttendanceRecord,
+  CertificateTemplate,
   ClassSection,
   Department,
+  EnrollmentMeta,
+  EnrollmentRequest,
+  ExamAssessment,
+  ExamSubmission,
   FeePlan,
   GradeEntry,
   GradingScale,
@@ -28,9 +34,11 @@ import type {
   IntegrationConfig,
   InternalMessage,
   InvoiceRecord,
+  IssuedCertificate,
   LearningResource,
   OwnerWorkspaceState,
   ParentMessage,
+  PaymentReminder,
   PermissionAction,
   PermissionModule,
   RolePermissionMatrix,
@@ -340,6 +348,26 @@ function createInitialWorkspaceState(): OwnerWorkspaceState {
     },
     integrations,
     accountPrefsByUser: {},
+    enrollmentRequests: [],
+    enrollmentMeta: {},
+    exams: [],
+    examSubmissions: [],
+    certificateTemplates: [
+      {
+        id: "cert-default",
+        name: "Ezana Standard Completion Certificate",
+        title: "Certificate of Completion",
+        subtitle: "Ezana Academy — Practical Skills & Academic Excellence",
+        bodyText:
+          "This certifies that the student named below has successfully completed all required coursework, practical lessons, and assessments for this program.",
+        signatoryName: "Ezana Academy Academic Board",
+        signatoryTitle: "Director of Academics",
+        accentColor: "#0f5132",
+        isDefault: true,
+      },
+    ],
+    issuedCertificates: [],
+    paymentReminders: [],
   };
 }
 
@@ -352,12 +380,31 @@ function ensureWorkspaceLoaded(): OwnerWorkspaceState {
       const raw = fs.readFileSync(WORKSPACE_FILE, "utf8");
       const parsed = JSON.parse(raw) as Partial<OwnerWorkspaceState>;
       const fallback = createInitialWorkspaceState();
+      const mergedRolePerms = {
+        ...fallback.rolePermissions,
+        ...(parsed.rolePermissions ?? {}),
+      } as RolePermissionMatrix;
+      for (const roleKey of ["owner", "admin", "instructor", "parent", "student"] as AppRole[]) {
+        mergedRolePerms[roleKey] = {
+          ...fallback.rolePermissions[roleKey],
+          ...(parsed.rolePermissions?.[roleKey] ?? {}),
+        };
+      }
       cachedState = {
         ...fallback,
         ...parsed,
-        rolePermissions: parsed.rolePermissions ?? fallback.rolePermissions,
+        rolePermissions: mergedRolePerms,
         systemSettings: { ...fallback.systemSettings, ...(parsed.systemSettings ?? {}) },
         academyExt: { ...fallback.academyExt, ...(parsed.academyExt ?? {}) },
+        enrollmentRequests: parsed.enrollmentRequests ?? fallback.enrollmentRequests,
+        enrollmentMeta: parsed.enrollmentMeta ?? fallback.enrollmentMeta,
+        exams: parsed.exams ?? fallback.exams,
+        examSubmissions: parsed.examSubmissions ?? fallback.examSubmissions,
+        certificateTemplates: parsed.certificateTemplates?.length
+          ? parsed.certificateTemplates
+          : fallback.certificateTemplates,
+        issuedCertificates: parsed.issuedCertificates ?? fallback.issuedCertificates,
+        paymentReminders: parsed.paymentReminders ?? fallback.paymentReminders,
       };
       // Ensure owner permissions remain unrestricted
       for (const mod of ALL_PERMISSION_MODULES) {
@@ -604,7 +651,48 @@ export type WorkspaceMutationPayload =
         testConnection?: boolean;
       };
     }
-  | { type: "update_account_prefs"; prefs: AccountPreferences };
+  | { type: "update_account_prefs"; prefs: AccountPreferences }
+  | {
+      type: "upsert_enrollment_request";
+      payload: Omit<
+        EnrollmentRequest,
+        "id" | "status" | "reviewedBy" | "reviewedAt" | "reviewNote" | "createdAt"
+      > & { id?: string };
+    }
+  | {
+      type: "review_enrollment_request";
+      id: string;
+      status: "approved" | "rejected";
+      reviewNote?: string;
+    }
+  | { type: "delete_enrollment_request"; id: string }
+  | { type: "upsert_enrollment_meta"; payload: EnrollmentMeta }
+  | { type: "assign_student_class"; studentId: string; classSectionId: string | null }
+  | { type: "upsert_exam"; payload: ExamAssessment }
+  | { type: "delete_exam"; id: string }
+  | { type: "upsert_exam_submission"; payload: ExamSubmission }
+  | { type: "delete_exam_submission"; id: string }
+  | { type: "upsert_certificate_template"; payload: CertificateTemplate }
+  | {
+      type: "issue_certificate";
+      payload: Omit<IssuedCertificate, "id" | "certificateCode" | "issuedAt" | "issuedBy" | "status"> & {
+        id?: string;
+        certificateCode?: string;
+      };
+    }
+  | { type: "update_certificate_status"; id: string; status: IssuedCertificate["status"] }
+  | { type: "delete_certificate"; id: string }
+  | {
+      type: "send_payment_reminder";
+      payload: {
+        studentId: string;
+        feePlanId: string | null;
+        amountDue: number;
+        channel: PaymentReminder["channel"];
+        parentId?: string | null;
+        note?: string;
+      };
+    };
 
 export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload): {
   module: PermissionModule;
@@ -650,10 +738,33 @@ export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload)
       return { module: "resources", action: "edit" };
     case "delete_resource":
       return { module: "resources", action: "delete" };
+    case "upsert_enrollment_request":
+      return { module: "enrollments", action: "create" };
+    case "review_enrollment_request":
+      return { module: "enrollments", action: "approve" };
+    case "upsert_enrollment_meta":
+    case "assign_student_class":
+      return { module: "enrollments", action: "edit" };
+    case "delete_enrollment_request":
+      return { module: "enrollments", action: "delete" };
+    case "upsert_exam":
+    case "upsert_exam_submission":
+      return { module: "exams", action: "edit" };
+    case "delete_exam":
+    case "delete_exam_submission":
+      return { module: "exams", action: "delete" };
+    case "upsert_certificate_template":
+    case "update_certificate_status":
+      return { module: "certificates", action: "edit" };
+    case "issue_certificate":
+      return { module: "certificates", action: "create" };
+    case "delete_certificate":
+      return { module: "certificates", action: "delete" };
     case "upsert_fee_plan":
     case "generate_invoice":
     case "update_invoice_status":
     case "update_transaction_refund":
+    case "send_payment_reminder":
       return { module: "finance", action: "edit" };
     case "delete_fee_plan":
     case "delete_invoice":
@@ -690,6 +801,7 @@ function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
 export function applyWorkspaceMutation(
   mutation: WorkspaceMutationPayload,
   actorId: string,
+  callerRoles: AppRole[] = ["owner"],
 ): { state: OwnerWorkspaceState; auditAction: string; entity: string; entityId: string | null } {
   const current = ensureWorkspaceLoaded();
   const next: OwnerWorkspaceState = { ...current };
@@ -996,7 +1108,17 @@ export function applyWorkspaceMutation(
       entityId = mutation.payload.messageId;
       break;
     case "update_role_permissions": {
-      const updated = { ...mutation.rolePermissions };
+      const isCallerOwner = callerRoles.includes("owner");
+      const updated: RolePermissionMatrix = {
+        ...current.rolePermissions,
+        instructor: mutation.rolePermissions.instructor ?? current.rolePermissions.instructor,
+        parent: mutation.rolePermissions.parent ?? current.rolePermissions.parent,
+        student: mutation.rolePermissions.student ?? current.rolePermissions.student,
+        admin: isCallerOwner
+          ? (mutation.rolePermissions.admin ?? current.rolePermissions.admin)
+          : current.rolePermissions.admin,
+        owner: { ...current.rolePermissions.owner },
+      };
       for (const mod of ALL_PERMISSION_MODULES) {
         updated.owner[mod] = {
           view: true,
@@ -1057,6 +1179,253 @@ export function applyWorkspaceMutation(
       entity = "account_preferences";
       entityId = actorId;
       break;
+    case "upsert_enrollment_request": {
+      const item: EnrollmentRequest = {
+        id: mutation.payload.id || crypto.randomUUID(),
+        studentId: mutation.payload.studentId,
+        courseId: mutation.payload.courseId,
+        classSectionId: mutation.payload.classSectionId ?? null,
+        requestedBy: mutation.payload.requestedBy ?? actorId,
+        notes: mutation.payload.notes ?? "",
+        status: "pending",
+        reviewedBy: null,
+        reviewedAt: null,
+        reviewNote: "",
+        createdAt: new Date().toISOString(),
+      };
+      next.enrollmentRequests = upsertById(next.enrollmentRequests, item);
+      entity = "enrollment_request";
+      entityId = item.id;
+      break;
+    }
+    case "review_enrollment_request": {
+      const target = next.enrollmentRequests.find((r) => r.id === mutation.id);
+      if (!target) throw new Error("Enrollment request not found.");
+      const reviewedAt = new Date().toISOString();
+      next.enrollmentRequests = next.enrollmentRequests.map((r) =>
+        r.id === mutation.id
+          ? {
+              ...r,
+              status: mutation.status,
+              reviewedBy: actorId,
+              reviewedAt,
+              reviewNote: mutation.reviewNote?.trim() ?? "",
+            }
+          : r,
+      );
+      if (mutation.status === "approved" && target.classSectionId) {
+        next.classes = next.classes.map((c) => {
+          if (c.id !== target.classSectionId) return c;
+          if (c.studentIds.includes(target.studentId)) return c;
+          return { ...c, studentIds: [...c.studentIds, target.studentId] };
+        });
+      }
+      next.notifications = [
+        {
+          id: crypto.randomUUID(),
+          title:
+            mutation.status === "approved"
+              ? "Enrollment Request Approved"
+              : "Enrollment Request Update",
+          message:
+            mutation.status === "approved"
+              ? `Course enrollment approved${mutation.reviewNote ? `: ${mutation.reviewNote}` : "."}`
+              : `Enrollment request declined${mutation.reviewNote ? `: ${mutation.reviewNote}` : "."}`,
+          category: "academic",
+          targetRole: "student",
+          targetClassId: target.classSectionId,
+          readBy: [],
+          createdAt: reviewedAt,
+        },
+        ...next.notifications,
+      ];
+      entity = "enrollment_request";
+      entityId = mutation.id;
+      auditAction = `enrollment_request_${mutation.status}`;
+      break;
+    }
+    case "delete_enrollment_request":
+      next.enrollmentRequests = next.enrollmentRequests.filter((r) => r.id !== mutation.id);
+      entity = "enrollment_request";
+      entityId = mutation.id;
+      break;
+    case "upsert_enrollment_meta":
+      next.enrollmentMeta = {
+        ...next.enrollmentMeta,
+        [mutation.payload.enrollmentKey]: {
+          ...mutation.payload,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+      entity = "enrollment";
+      entityId = mutation.payload.enrollmentKey;
+      break;
+    case "assign_student_class": {
+      const { studentId, classSectionId } = mutation;
+      if (classSectionId) {
+        const dest = next.classes.find((c) => c.id === classSectionId);
+        if (!dest) throw new Error("Selected class section does not exist.");
+        if (!dest.studentIds.includes(studentId) && dest.studentIds.length >= dest.capacity) {
+          throw new Error(`Class "${dest.name}" has reached maximum capacity (${dest.capacity}).`);
+        }
+      }
+      next.classes = next.classes.map((c) => {
+        const filtered = c.studentIds.filter((id) => id !== studentId);
+        if (classSectionId && c.id === classSectionId) {
+          return { ...c, studentIds: [...filtered, studentId] };
+        }
+        return { ...c, studentIds: filtered };
+      });
+      const existingMeta = next.studentMeta[studentId];
+      next.studentMeta = {
+        ...next.studentMeta,
+        [studentId]: {
+          userId: studentId,
+          studentCode: existingMeta?.studentCode ?? `STU-${studentId.slice(0, 6).toUpperCase()}`,
+          classSectionId,
+          academicYearId:
+            existingMeta?.academicYearId ??
+            next.academicYears.find((y) => y.isCurrent)?.id ??
+            null,
+          guardianName: existingMeta?.guardianName ?? "",
+          guardianPhone: existingMeta?.guardianPhone ?? "",
+          address: existingMeta?.address ?? "",
+          dateOfBirth: existingMeta?.dateOfBirth ?? "",
+          notes: existingMeta?.notes ?? "",
+        },
+      };
+      entity = "class_assignment";
+      entityId = studentId;
+      break;
+    }
+    case "upsert_exam": {
+      if (mutation.payload.maxScore <= 0 || mutation.payload.passingScore < 0) {
+        throw new Error("Exam max score must be positive and passing score non-negative.");
+      }
+      if (mutation.payload.passingScore > mutation.payload.maxScore) {
+        throw new Error("Passing score cannot exceed max score.");
+      }
+      next.exams = upsertById(next.exams, mutation.payload);
+      entity = "exam";
+      entityId = mutation.payload.id;
+      break;
+    }
+    case "delete_exam":
+      next.exams = next.exams.filter((ex) => ex.id !== mutation.id);
+      next.examSubmissions = next.examSubmissions.filter((s) => s.examId !== mutation.id);
+      entity = "exam";
+      entityId = mutation.id;
+      break;
+    case "upsert_exam_submission": {
+      const exam = next.exams.find((ex) => ex.id === mutation.payload.examId);
+      if (
+        exam &&
+        (mutation.payload.score < 0 || mutation.payload.score > exam.maxScore)
+      ) {
+        throw new Error(`Exam score must be between 0 and ${exam.maxScore}.`);
+      }
+      next.examSubmissions = upsertById(next.examSubmissions, mutation.payload);
+      entity = "exam_submission";
+      entityId = mutation.payload.id;
+      break;
+    }
+    case "delete_exam_submission":
+      next.examSubmissions = next.examSubmissions.filter((s) => s.id !== mutation.id);
+      entity = "exam_submission";
+      entityId = mutation.id;
+      break;
+    case "upsert_certificate_template": {
+      let templates = upsertById(next.certificateTemplates, mutation.payload);
+      if (mutation.payload.isDefault) {
+        templates = templates.map((t) => ({ ...t, isDefault: t.id === mutation.payload.id }));
+      }
+      next.certificateTemplates = templates;
+      entity = "certificate_template";
+      entityId = mutation.payload.id;
+      break;
+    }
+    case "issue_certificate": {
+      const code =
+        mutation.payload.certificateCode ||
+        nextCertificateCode(next.issuedCertificates.map((c) => c.certificateCode));
+      const cert: IssuedCertificate = {
+        ...mutation.payload,
+        id: mutation.payload.id || crypto.randomUUID(),
+        certificateCode: code,
+        issuedAt: new Date().toISOString(),
+        issuedBy: actorId,
+        status: "issued",
+      };
+      next.issuedCertificates = upsertById(next.issuedCertificates, cert);
+      entity = "certificate";
+      entityId = cert.id;
+      break;
+    }
+    case "update_certificate_status":
+      next.issuedCertificates = next.issuedCertificates.map((c) =>
+        c.id === mutation.id ? { ...c, status: mutation.status } : c,
+      );
+      entity = "certificate";
+      entityId = mutation.id;
+      break;
+    case "delete_certificate":
+      next.issuedCertificates = next.issuedCertificates.filter((c) => c.id !== mutation.id);
+      entity = "certificate";
+      entityId = mutation.id;
+      break;
+    case "send_payment_reminder": {
+      const now = new Date().toISOString();
+      const reminder: PaymentReminder = {
+        id: crypto.randomUUID(),
+        studentId: mutation.payload.studentId,
+        feePlanId: mutation.payload.feePlanId,
+        amountDue: mutation.payload.amountDue,
+        channel: mutation.payload.channel,
+        sentBy: actorId,
+        sentAt: now,
+        note: mutation.payload.note ?? "",
+      };
+      next.paymentReminders = [reminder, ...next.paymentReminders];
+      next.notifications = [
+        {
+          id: crypto.randomUUID(),
+          title: "Tuition & Fee Balance Reminder",
+          message:
+            mutation.payload.note?.trim() ||
+            `Outstanding balance of ${mutation.payload.amountDue.toLocaleString()} ETB is due. Please upload your payment receipt.`,
+          category: "finance",
+          targetRole: "student",
+          targetClassId: null,
+          readBy: [],
+          createdAt: now,
+        },
+        ...next.notifications,
+      ];
+      if (mutation.payload.parentId) {
+        const senderRole: AppRole = callerRoles.includes("owner") ? "owner" : "admin";
+        next.parentMessages = [
+          {
+            id: crypto.randomUUID(),
+            parentId: mutation.payload.parentId,
+            studentId: mutation.payload.studentId,
+            senderId: actorId,
+            senderRole,
+            subject: "Outstanding Fee Balance Reminder",
+            body:
+              mutation.payload.note?.trim() ||
+              `Friendly reminder regarding an outstanding tuition balance of ${mutation.payload.amountDue.toLocaleString()} ETB.`,
+            includeSnapshot: false,
+            snapshotSummary: null,
+            read: false,
+            createdAt: now,
+          },
+          ...next.parentMessages,
+        ];
+      }
+      entity = "payment_reminder";
+      entityId = reminder.id;
+      break;
+    }
   }
 
   persistWorkspaceState(next);
