@@ -24,6 +24,11 @@ import { Route as CoursesSlugRouteImport } from './routes/courses.$slug'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard.index'
 import { Route as AuthenticatedDashboardPaymentsRouteImport } from './routes/_authenticated/dashboard.payments'
 import { Route as ApiCourseCoversSplatRouteImport } from './routes/api/course-covers/$'
+import { Route as ApiInstructorWorkspaceRouteImport } from './routes/api/instructor/workspace'
+import { Route as ApiOwnerUsersRouteImport } from './routes/api/owner/users'
+import { Route as ApiOwnerWorkspaceRouteImport } from './routes/api/owner/workspace'
+import { Route as ApiParentWorkspaceRouteImport } from './routes/api/parent/workspace'
+import { Route as ApiStudentWorkspaceRouteImport } from './routes/api/student/workspace'
 import { Route as AuthenticatedDashboardLearnSlugRouteImport } from './routes/_authenticated/dashboard.learn.$slug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -103,6 +108,31 @@ const ApiCourseCoversSplatRoute = ApiCourseCoversSplatRouteImport.update({
   path: '/api/course-covers/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInstructorWorkspaceRoute = ApiInstructorWorkspaceRouteImport.update({
+  id: '/api/instructor/workspace',
+  path: '/api/instructor/workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOwnerUsersRoute = ApiOwnerUsersRouteImport.update({
+  id: '/api/owner/users',
+  path: '/api/owner/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOwnerWorkspaceRoute = ApiOwnerWorkspaceRouteImport.update({
+  id: '/api/owner/workspace',
+  path: '/api/owner/workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiParentWorkspaceRoute = ApiParentWorkspaceRouteImport.update({
+  id: '/api/parent/workspace',
+  path: '/api/parent/workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStudentWorkspaceRoute = ApiStudentWorkspaceRouteImport.update({
+  id: '/api/student/workspace',
+  path: '/api/student/workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedDashboardLearnSlugRoute =
   AuthenticatedDashboardLearnSlugRouteImport.update({
     id: '/learn/$slug',
@@ -124,6 +154,11 @@ export interface FileRoutesByFullPath {
   '/courses/': typeof CoursesIndexRoute
   '/dashboard/payments': typeof AuthenticatedDashboardPaymentsRoute
   '/api/course-covers/$': typeof ApiCourseCoversSplatRoute
+  '/api/instructor/workspace': typeof ApiInstructorWorkspaceRoute
+  '/api/owner/users': typeof ApiOwnerUsersRoute
+  '/api/owner/workspace': typeof ApiOwnerWorkspaceRoute
+  '/api/parent/workspace': typeof ApiParentWorkspaceRoute
+  '/api/student/workspace': typeof ApiStudentWorkspaceRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/dashboard/learn/$slug': typeof AuthenticatedDashboardLearnSlugRoute
 }
@@ -140,6 +175,11 @@ export interface FileRoutesByTo {
   '/courses': typeof CoursesIndexRoute
   '/dashboard/payments': typeof AuthenticatedDashboardPaymentsRoute
   '/api/course-covers/$': typeof ApiCourseCoversSplatRoute
+  '/api/instructor/workspace': typeof ApiInstructorWorkspaceRoute
+  '/api/owner/users': typeof ApiOwnerUsersRoute
+  '/api/owner/workspace': typeof ApiOwnerWorkspaceRoute
+  '/api/parent/workspace': typeof ApiParentWorkspaceRoute
+  '/api/student/workspace': typeof ApiStudentWorkspaceRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/dashboard/learn/$slug': typeof AuthenticatedDashboardLearnSlugRoute
 }
@@ -159,6 +199,11 @@ export interface FileRoutesById {
   '/courses/': typeof CoursesIndexRoute
   '/_authenticated/dashboard/payments': typeof AuthenticatedDashboardPaymentsRoute
   '/api/course-covers/$': typeof ApiCourseCoversSplatRoute
+  '/api/instructor/workspace': typeof ApiInstructorWorkspaceRoute
+  '/api/owner/users': typeof ApiOwnerUsersRoute
+  '/api/owner/workspace': typeof ApiOwnerWorkspaceRoute
+  '/api/parent/workspace': typeof ApiParentWorkspaceRoute
+  '/api/student/workspace': typeof ApiStudentWorkspaceRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/dashboard/learn/$slug': typeof AuthenticatedDashboardLearnSlugRoute
 }
@@ -178,6 +223,11 @@ export interface FileRouteTypes {
     | '/courses/'
     | '/dashboard/payments'
     | '/api/course-covers/$'
+    | '/api/instructor/workspace'
+    | '/api/owner/users'
+    | '/api/owner/workspace'
+    | '/api/parent/workspace'
+    | '/api/student/workspace'
     | '/dashboard/'
     | '/dashboard/learn/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -194,6 +244,11 @@ export interface FileRouteTypes {
     | '/courses'
     | '/dashboard/payments'
     | '/api/course-covers/$'
+    | '/api/instructor/workspace'
+    | '/api/owner/users'
+    | '/api/owner/workspace'
+    | '/api/parent/workspace'
+    | '/api/student/workspace'
     | '/dashboard'
     | '/dashboard/learn/$slug'
   id:
@@ -212,6 +267,11 @@ export interface FileRouteTypes {
     | '/courses/'
     | '/_authenticated/dashboard/payments'
     | '/api/course-covers/$'
+    | '/api/instructor/workspace'
+    | '/api/owner/users'
+    | '/api/owner/workspace'
+    | '/api/parent/workspace'
+    | '/api/student/workspace'
     | '/_authenticated/dashboard/'
     | '/_authenticated/dashboard/learn/$slug'
   fileRoutesById: FileRoutesById
@@ -229,6 +289,11 @@ export interface RootRouteChildren {
   CoursesSlugRoute: typeof CoursesSlugRoute
   CoursesIndexRoute: typeof CoursesIndexRoute
   ApiCourseCoversSplatRoute: typeof ApiCourseCoversSplatRoute
+  ApiInstructorWorkspaceRoute: typeof ApiInstructorWorkspaceRoute
+  ApiOwnerUsersRoute: typeof ApiOwnerUsersRoute
+  ApiOwnerWorkspaceRoute: typeof ApiOwnerWorkspaceRoute
+  ApiParentWorkspaceRoute: typeof ApiParentWorkspaceRoute
+  ApiStudentWorkspaceRoute: typeof ApiStudentWorkspaceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -338,6 +403,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCourseCoversSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/instructor/workspace': {
+      id: '/api/instructor/workspace'
+      path: '/api/instructor/workspace'
+      fullPath: '/api/instructor/workspace'
+      preLoaderRoute: typeof ApiInstructorWorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/owner/users': {
+      id: '/api/owner/users'
+      path: '/api/owner/users'
+      fullPath: '/api/owner/users'
+      preLoaderRoute: typeof ApiOwnerUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/owner/workspace': {
+      id: '/api/owner/workspace'
+      path: '/api/owner/workspace'
+      fullPath: '/api/owner/workspace'
+      preLoaderRoute: typeof ApiOwnerWorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/parent/workspace': {
+      id: '/api/parent/workspace'
+      path: '/api/parent/workspace'
+      fullPath: '/api/parent/workspace'
+      preLoaderRoute: typeof ApiParentWorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/student/workspace': {
+      id: '/api/student/workspace'
+      path: '/api/student/workspace'
+      fullPath: '/api/student/workspace'
+      preLoaderRoute: typeof ApiStudentWorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/dashboard/learn/$slug': {
       id: '/_authenticated/dashboard/learn/$slug'
       path: '/learn/$slug'
@@ -390,6 +490,11 @@ const rootRouteChildren: RootRouteChildren = {
   CoursesSlugRoute: CoursesSlugRoute,
   CoursesIndexRoute: CoursesIndexRoute,
   ApiCourseCoversSplatRoute: ApiCourseCoversSplatRoute,
+  ApiInstructorWorkspaceRoute: ApiInstructorWorkspaceRoute,
+  ApiOwnerUsersRoute: ApiOwnerUsersRoute,
+  ApiOwnerWorkspaceRoute: ApiOwnerWorkspaceRoute,
+  ApiParentWorkspaceRoute: ApiParentWorkspaceRoute,
+  ApiStudentWorkspaceRoute: ApiStudentWorkspaceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
