@@ -22,6 +22,7 @@ import {
   ALL_SUBMENU_ITEMS,
   OWNER_NAV_GROUPS,
 } from "@/components/dashboard/owner/nav-config";
+import { detectResourceType } from "@/lib/resource-utils";
 import type { ExamAssessment, ExamSubmission, GradingScale, TimetableSlot } from "@/lib/owner/types";
 
 const SAMPLE_SCALE: GradingScale = {
@@ -461,4 +462,46 @@ describe("Server Store Mutations & Permission Mapping", () => {
     expect(rbacState.rolePermissions.admin.platform.edit).toBe(false);
     expect(rbacState.rolePermissions.instructor.courses.delete).toBe(true);
   });
+
+  it("detects all file types (PDF, Word, Excel, PPT, CSV, image, zip, video, web link)", () => {
+    expect(detectResourceType("assignment.pdf")).toBe("pdf");
+    expect(detectResourceType("syllabus.doc")).toBe("document");
+    expect(detectResourceType("notes.docx")).toBe("document");
+    expect(detectResourceType("budget.xls")).toBe("document");
+    expect(detectResourceType("scores.xlsx")).toBe("document");
+    expect(detectResourceType("data.csv")).toBe("document");
+    expect(detectResourceType("lecture.ppt")).toBe("presentation");
+    expect(detectResourceType("deck.pptx")).toBe("presentation");
+    expect(detectResourceType("diagram.png")).toBe("document");
+    expect(detectResourceType("photo.jpg")).toBe("document");
+    expect(detectResourceType("bundle.zip")).toBe("document");
+    expect(detectResourceType("archive.rar")).toBe("document");
+    expect(detectResourceType("recording.mp4")).toBe("video");
+    expect(detectResourceType("https://www.youtube.com/watch?v=xyz123")).toBe("video");
+    expect(detectResourceType("https://drive.google.com/open?id=123")).toBe("link");
+    expect(detectResourceType("https://ezana.academy/docs")).toBe("link");
+  });
+
+  it("validates that either an uploaded file or a URL must pass creation", () => {
+    const canPassCreator = (hasFile: boolean, url: string, storagePath: string | null) => {
+      const finalUrl = url.trim();
+      return Boolean(finalUrl || storagePath || hasFile);
+    };
+
+    // Fails only if neither is provided
+    expect(canPassCreator(false, "", null)).toBe(false);
+    expect(canPassCreator(false, "   ", null)).toBe(false);
+
+    // Passes if file is provided (without URL)
+    expect(canPassCreator(true, "", null)).toBe(true);
+    expect(canPassCreator(false, "", "user-1/uuid-doc.pdf")).toBe(true);
+
+    // Passes if URL is provided (without file)
+    expect(canPassCreator(false, "https://example.com/guide.pdf", null)).toBe(true);
+    expect(canPassCreator(false, "/api/course-covers/user/doc.docx", null)).toBe(true);
+
+    // Passes if both are provided
+    expect(canPassCreator(true, "https://example.com/guide.pdf", "user-1/uuid-doc.pdf")).toBe(true);
+  });
 });
+

@@ -20,6 +20,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { displayName, useAuth } from "@/lib/auth";
@@ -37,6 +38,7 @@ import {
   type YouTubeChannelVideo,
 } from "@/lib/youtube";
 import { buildReportCard, computeAttendanceStats, computeGradeOutcome } from "@/lib/owner/logic";
+import { detectResourceType } from "@/lib/resource-utils";
 import type {
   AttendanceRecord,
   AttendanceStatus,
@@ -1703,6 +1705,8 @@ export function ELearningResourcesModule({ data }: { data: OwnerDataHandle }) {
   const [typeFilter, setTypeFilter] = useState("all");
   const [dialog, setDialog] = useState<LearningResource | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resources = useMemo(
     () =>
@@ -1714,43 +1718,87 @@ export function ELearningResourcesModule({ data }: { data: OwnerDataHandle }) {
     [workspace?.resources, courseFilter, typeFilter],
   );
 
-  async function handleFileUpload(file: File) {
-    if (!user || !dialog) return;
+  async function uploadSelectedFile(
+    file: File,
+  ): Promise<{ url: string; storagePath: string; sizeLabel: string } | null> {
+    if (!user) {
+      toast.error("You must be signed in to upload resource files.");
+      return null;
+    }
     setUploading(true);
     try {
-      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const storagePath = `resources/${user.id}/${crypto.randomUUID()}-${safe}`;
-      const { error } = await supabase.storage
-        .from("course-covers")
-        .upload(storagePath, file, { contentType: file.type || "application/octet-stream" });
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+      const storagePath = `${user.id}/${crypto.randomUUID()}-${safe}`;
+      const { error } = await supabase.storage.from("course-covers").upload(storagePath, file, {
+        contentType: file.type || "application/octet-stream",
+        upsert: true,
+      });
       if (error) throw new Error(error.message);
       const url = courseCoverUrl(storagePath);
       const sizeKb = Math.max(1, Math.round(file.size / 1024));
-      setDialog({
-        ...dialog,
-        url,
-        storagePath,
-        fileSizeLabel: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
-      });
-      toast.success("Resource file uploaded");
+      const sizeLabel = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
+      return { url, storagePath, sizeLabel };
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed");
+      toast.error(err instanceof Error ? err.message : "File upload failed.");
+      return null;
     } finally {
       setUploading(false);
     }
+  }
+
+  async function handleFileSelected(file: File) {
+    setSelectedFile(file);
+    if (!dialog) return;
+    const detectedType = detectResourceType(file.name);
+    const fallbackTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, " ");
+    const newTitle = dialog.title.trim() ? dialog.title : fallbackTitle;
+
+    const res = await uploadSelectedFile(file);
+    if (res) {
+      setDialog((prev) =>
+        prev
+          ? {
+              ...prev,
+              title: newTitle,
+              type: detectedType,
+              url: res.url,
+              storagePath: res.storagePath,
+              fileSizeLabel: res.sizeLabel,
+            }
+          : null,
+      );
+      toast.success(`Uploaded "${file.name}" (${res.sizeLabel})`);
+    }
+  }
+
+  function handleRemoveFile() {
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setDialog((prev) =>
+      prev
+        ? {
+            ...prev,
+            storagePath: null,
+            fileSizeLabel: "External / Link",
+            url: prev.storagePath && prev.url.includes(prev.storagePath) ? "" : prev.url,
+          }
+        : null,
+    );
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="E-Learning Resources"
-        description="Manage videos, PDFs, documents, presentations, and role-based learning resource access across courses."
+        description="Manage videos, PDFs, documents, presentations, spreadsheets, archives, and role-based learning resource access across courses."
         actions={
           can("resources", "create") ? (
             <Button
               size="sm"
               variant="emerald"
-              onClick={() =>
+              onClick={() => {
+                setSelectedFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
                 setDialog({
                   id: crypto.randomUUID(),
                   title: "",
@@ -1760,12 +1808,12 @@ export function ELearningResourcesModule({ data }: { data: OwnerDataHandle }) {
                   categoryId: db.categories[0]?.id ?? null,
                   url: "",
                   storagePath: null,
-                  fileSizeLabel: "External / Link",
+                  fileSizeLabel: "Digital Resource",
                   accessLevel: "enrolled",
                   description: "",
                   createdAt: new Date().toISOString(),
-                })
-              }
+                });
+              }}
             >
               <Plus className="h-4 w-4" /> Add Resource
             </Button>
@@ -1846,7 +1894,15 @@ export function ELearningResourcesModule({ data }: { data: OwnerDataHandle }) {
                         </Button>
                       )}
                       {can("resources", "edit") && (
-                        <Button size="sm" variant="outline" onClick={() => setDialog(res)}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedFile(null);
+                            if (fileInputRef.current) fileInputRef.current.value = "";
+                            setDialog(res);
+                          }}
+                        >
                           Edit
                         </Button>
                       )}
@@ -1913,22 +1969,73 @@ export function ELearningResourcesModule({ data }: { data: OwnerDataHandle }) {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>E-Learning Resource</DialogTitle>
+            <DialogDescription>
+              Upload documents, spreadsheets, presentations, video/audio files, archives, or web links.
+            </DialogDescription>
           </DialogHeader>
           {dialog && (
             <form
               className="grid gap-3 sm:grid-cols-2"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                void mutateWorkspace(
-                  { type: "upsert_resource", payload: dialog },
+                if (!dialog.title.trim()) {
+                  toast.error("Please enter a title for the resource.");
+                  return;
+                }
+
+                let finalUrl = dialog.url.trim();
+                let finalStoragePath = dialog.storagePath;
+                let finalSizeLabel = dialog.fileSizeLabel;
+
+                // If a file was selected but not uploaded yet, upload it now
+                if (selectedFile && !finalStoragePath) {
+                  const uploadRes = await uploadSelectedFile(selectedFile);
+                  if (!uploadRes) {
+                    return;
+                  }
+                  finalUrl = uploadRes.url;
+                  finalStoragePath = uploadRes.storagePath;
+                  finalSizeLabel = uploadRes.sizeLabel;
+                }
+
+                // Either field must be provided
+                if (!finalUrl && !finalStoragePath) {
+                  toast.error("Please upload a file or paste a resource URL.");
+                  return;
+                }
+
+                // Normalize web URL if protocol was omitted
+                if (
+                  finalUrl &&
+                  !finalUrl.startsWith("/") &&
+                  !/^https?:\/\//i.test(finalUrl) &&
+                  finalUrl.includes(".")
+                ) {
+                  finalUrl = `https://${finalUrl}`;
+                }
+
+                await mutateWorkspace(
+                  {
+                    type: "upsert_resource",
+                    payload: {
+                      ...dialog,
+                      title: dialog.title.trim(),
+                      url: finalUrl,
+                      storagePath: finalStoragePath,
+                      fileSizeLabel: finalSizeLabel || "Digital Resource",
+                    },
+                  },
                   "Learning resource saved",
-                ).then(() => setDialog(null));
+                );
+                setDialog(null);
+                setSelectedFile(null);
               }}
             >
               <label className="space-y-1 text-sm font-medium sm:col-span-2">
                 Title
                 <Input
                   required
+                  placeholder="e.g. Grade 10 Physics Worksheet 3"
                   value={dialog.title}
                   onChange={(e) => setDialog({ ...dialog, title: e.target.value })}
                 />
@@ -1940,11 +2047,11 @@ export function ELearningResourcesModule({ data }: { data: OwnerDataHandle }) {
                   onChange={(e) => setDialog({ ...dialog, type: e.target.value as ResourceType })}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
-                  <option value="pdf">PDF</option>
-                  <option value="document">Document</option>
-                  <option value="presentation">Presentation</option>
-                  <option value="video">Video</option>
-                  <option value="link">Web Link</option>
+                  <option value="pdf">PDF Document (.pdf)</option>
+                  <option value="document">Document / Word / Excel / CSV / ZIP</option>
+                  <option value="presentation">Presentation / Slides (.pptx, .ppt)</option>
+                  <option value="video">Video (.mp4, YouTube, etc.)</option>
+                  <option value="link">Web Link / URL</option>
                 </select>
               </label>
               <label className="space-y-1 text-sm font-medium">
@@ -1969,7 +2076,7 @@ export function ELearningResourcesModule({ data }: { data: OwnerDataHandle }) {
                   onChange={(e) => setDialog({ ...dialog, courseId: e.target.value || null })}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
-                  <option value="">General</option>
+                  <option value="">General (All Courses)</option>
                   {db.courses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.title}
@@ -1984,7 +2091,7 @@ export function ELearningResourcesModule({ data }: { data: OwnerDataHandle }) {
                   onChange={(e) => setDialog({ ...dialog, categoryId: e.target.value || null })}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
-                  <option value="">None</option>
+                  <option value="">None (General)</option>
                   {db.categories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -1992,36 +2099,92 @@ export function ELearningResourcesModule({ data }: { data: OwnerDataHandle }) {
                   ))}
                 </select>
               </label>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label>Upload File or Paste URL</Label>
-                <div className="flex items-center gap-2">
+
+              <div className="space-y-2 sm:col-span-2">
+                <div className="flex items-center justify-between">
+                  <Label>Upload File or Paste URL</Label>
+                  <span className="text-[11px] font-normal text-muted-foreground">
+                    (Either field is accepted)
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.rtf,.odt,.ods,.odp,.zip,.rar,.7z,.tar,.gz,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp4,.webm,.mov,.mp3,.wav,*/*"
+                      disabled={uploading}
+                      className="cursor-pointer file:cursor-pointer"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void handleFileSelected(f);
+                      }}
+                    />
+                    {uploading && (
+                      <div className="flex shrink-0 items-center gap-1.5 text-xs text-primary font-medium">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Uploading…</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Accepts all file types: PDF, Word, Excel, PowerPoint, CSV, Images, ZIP archives, Video, Audio, or any document.
+                  </p>
+
+                  {(selectedFile || dialog.storagePath) && (
+                    <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs">
+                      <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+                        <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+                        <span className="truncate">
+                          Attached: {selectedFile?.name || dialog.storagePath?.split("/").pop()} ({dialog.fileSizeLabel})
+                        </span>
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-destructive hover:bg-destructive/10"
+                        onClick={handleRemoveFile}
+                      >
+                        <X className="mr-1 h-3.5 w-3.5" /> Remove
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1 pt-1">
+                  <span className="text-xs text-muted-foreground">Or paste web link / resource URL</span>
                   <Input
-                    type="file"
-                    disabled={uploading}
+                    placeholder="https://… or external resource link (YouTube, Google Drive, OneDrive, web)"
+                    value={dialog.url}
                     onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void handleFileUpload(f);
+                      const val = e.target.value;
+                      const detected = val.trim() ? detectResourceType(val) : dialog.type;
+                      setDialog({ ...dialog, url: val, type: detected });
                     }}
                   />
-                  {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
                 </div>
-                <Input
-                  required
-                  placeholder="https://… or uploaded path"
-                  value={dialog.url}
-                  onChange={(e) => setDialog({ ...dialog, url: e.target.value })}
-                />
               </div>
+
               <label className="space-y-1 text-sm font-medium sm:col-span-2">
                 Description
                 <Textarea
                   rows={2}
+                  placeholder="Optional brief notes or instructions for students…"
                   value={dialog.description}
                   onChange={(e) => setDialog({ ...dialog, description: e.target.value })}
                 />
               </label>
               <DialogFooter className="sm:col-span-2">
-                <Button type="button" variant="outline" onClick={() => setDialog(null)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setDialog(null);
+                    setSelectedFile(null);
+                  }}
+                >
                   Cancel
                 </Button>
                 <Button type="submit" variant="emerald" disabled={mutating || uploading}>

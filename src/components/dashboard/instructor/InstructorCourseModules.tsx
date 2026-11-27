@@ -18,7 +18,9 @@ import {
   Search,
   Sparkles,
   Trash2,
+  Upload,
   Users,
+  X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { displayName, useAuth } from "@/lib/auth";
@@ -55,7 +57,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { detectResourceType } from "@/lib/resource-utils";
 import {
   Table,
   TableBody,
@@ -1208,6 +1212,9 @@ export function InstructorMaterialsModule({ data }: { data: InstructorDataHandle
   const [editorOpen, setEditorOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<CourseMaterial | null>(null);
   const [editing, setEditing] = useState<CourseMaterial | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     courseId: "",
     lessonId: "",
@@ -1215,6 +1222,7 @@ export function InstructorMaterialsModule({ data }: { data: InstructorDataHandle
     title: "",
     type: "pdf" as ResourceType,
     url: "",
+    storagePath: null as string | null,
     fileSizeLabel: "",
     description: "",
     visibleToEnrolled: true,
@@ -1233,7 +1241,68 @@ export function InstructorMaterialsModule({ data }: { data: InstructorDataHandle
 
   const paged = useMemo(() => paginateRows(materials, page, 10), [materials, page]);
 
+  async function uploadSelectedFile(
+    file: File,
+  ): Promise<{ url: string; storagePath: string; sizeLabel: string } | null> {
+    if (!user) {
+      toast.error("You must be signed in to upload material files.");
+      return null;
+    }
+    setUploading(true);
+    try {
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+      const storagePath = `${user.id}/${crypto.randomUUID()}-${safe}`;
+      const { error } = await supabase.storage.from("course-covers").upload(storagePath, file, {
+        contentType: file.type || "application/octet-stream",
+        upsert: true,
+      });
+      if (error) throw new Error(error.message);
+      const url = courseCoverUrl(storagePath);
+      const sizeKb = Math.max(1, Math.round(file.size / 1024));
+      const sizeLabel = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
+      return { url, storagePath, sizeLabel };
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "File upload failed.");
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleFileSelected(file: File) {
+    setSelectedFile(file);
+    const detectedType = detectResourceType(file.name);
+    const fallbackTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, " ");
+    const newTitle = form.title.trim() ? form.title : fallbackTitle;
+
+    const res = await uploadSelectedFile(file);
+    if (res) {
+      setForm((prev) => ({
+        ...prev,
+        title: newTitle,
+        type: detectedType,
+        url: res.url,
+        storagePath: res.storagePath,
+        fileSizeLabel: res.sizeLabel,
+      }));
+      toast.success(`Uploaded "${file.name}" (${res.sizeLabel})`);
+    }
+  }
+
+  function handleRemoveFile() {
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setForm((prev) => ({
+      ...prev,
+      storagePath: null,
+      fileSizeLabel: "",
+      url: prev.storagePath && prev.url.includes(prev.storagePath) ? "" : prev.url,
+    }));
+  }
+
   function openEditor(mat: CourseMaterial | null) {
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setEditing(mat);
     setForm({
       courseId: mat?.courseId ?? db.courses[0]?.id ?? "",
@@ -1242,6 +1311,7 @@ export function InstructorMaterialsModule({ data }: { data: InstructorDataHandle
       title: mat?.title ?? "",
       type: mat?.type ?? "pdf",
       url: mat?.url ?? "",
+      storagePath: mat?.storagePath ?? null,
       fileSizeLabel: mat?.fileSizeLabel ?? "",
       description: mat?.description ?? "",
       visibleToEnrolled: mat?.visibleToEnrolled ?? true,
@@ -1255,11 +1325,34 @@ export function InstructorMaterialsModule({ data }: { data: InstructorDataHandle
       toast.error("Select a course and enter a material title.");
       return;
     }
-    const cleanUrl = safeHref(form.url);
-    if (form.url.trim() && !cleanUrl) {
-      toast.error("Enter a valid http/https or site-relative file URL.");
+
+    let finalUrl = form.url.trim();
+    let finalStoragePath = form.storagePath;
+    let finalSizeLabel = form.fileSizeLabel;
+
+    if (selectedFile && !finalStoragePath) {
+      const uploadRes = await uploadSelectedFile(selectedFile);
+      if (!uploadRes) return;
+      finalUrl = uploadRes.url;
+      finalStoragePath = uploadRes.storagePath;
+      finalSizeLabel = uploadRes.sizeLabel;
+    }
+
+    if (!finalUrl && !finalStoragePath) {
+      toast.error("Please upload a file or paste a material URL.");
       return;
     }
+
+    if (
+      finalUrl &&
+      !finalUrl.startsWith("/") &&
+      !/^https?:\/\//i.test(finalUrl) &&
+      finalUrl.includes(".")
+    ) {
+      finalUrl = `https://${finalUrl}`;
+    }
+
+    const cleanUrl = safeHref(finalUrl);
     const now = new Date().toISOString();
     await mutateWorkspace(
       {
@@ -1272,8 +1365,8 @@ export function InstructorMaterialsModule({ data }: { data: InstructorDataHandle
           title: form.title.trim(),
           type: form.type,
           url: cleanUrl,
-          storagePath: null,
-          fileSizeLabel: form.fileSizeLabel.trim() || "Digital file",
+          storagePath: finalStoragePath,
+          fileSizeLabel: finalSizeLabel.trim() || "Digital file",
           description: form.description.trim(),
           visibleToEnrolled: form.visibleToEnrolled,
           uploadedBy: user?.id ?? null,
@@ -1284,6 +1377,7 @@ export function InstructorMaterialsModule({ data }: { data: InstructorDataHandle
       editing ? "Course material updated" : "Course material added",
     );
     setEditorOpen(false);
+    setSelectedFile(null);
   }
 
   async function toggleVisibility(mat: CourseMaterial) {
@@ -1538,24 +1632,81 @@ export function InstructorMaterialsModule({ data }: { data: InstructorDataHandle
                 </select>
               </label>
             </div>
-            <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
-              <label className="block space-y-1 text-sm font-medium">
-                File / Resource URL
-                <Input
-                  required
-                  value={form.url}
-                  onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                  placeholder="https://... or /files/guide.pdf"
-                />
-              </label>
-              <label className="block space-y-1 text-sm font-medium">
-                Size Label
-                <Input
-                  value={form.fileSizeLabel}
-                  onChange={(e) => setForm((f) => ({ ...f, fileSizeLabel: e.target.value }))}
-                  placeholder="2.4 MB"
-                />
-              </label>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Upload File or Paste URL</Label>
+                <span className="text-[11px] font-normal text-muted-foreground">
+                  (Either field is accepted)
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.rtf,.odt,.ods,.odp,.zip,.rar,.7z,.tar,.gz,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp4,.webm,.mov,.mp3,.wav,*/*"
+                    disabled={uploading}
+                    className="cursor-pointer file:cursor-pointer"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void handleFileSelected(f);
+                    }}
+                  />
+                  {uploading && (
+                    <div className="flex shrink-0 items-center gap-1.5 text-xs text-primary font-medium">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Uploading…</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Accepts all file types: PDF, Word, Excel, PowerPoint, CSV, Images, ZIP archives, Video, Audio, or any document.
+                </p>
+
+                {(selectedFile || form.storagePath) && (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs">
+                    <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="truncate">
+                        Attached: {selectedFile?.name || form.storagePath?.split("/").pop()} ({form.fileSizeLabel || "Uploaded"})
+                      </span>
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-destructive hover:bg-destructive/10"
+                      onClick={handleRemoveFile}
+                    >
+                      <X className="mr-1 h-3.5 w-3.5" /> Remove
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-[1fr_140px] pt-1">
+                <label className="block space-y-1 text-sm font-medium">
+                  <span className="text-xs text-muted-foreground">Or paste web link / resource URL</span>
+                  <Input
+                    value={form.url}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const detected = val.trim() ? detectResourceType(val) : form.type;
+                      setForm((f) => ({ ...f, url: val, type: detected }));
+                    }}
+                    placeholder="https://... or uploaded path"
+                  />
+                </label>
+                <label className="block space-y-1 text-sm font-medium">
+                  <span className="text-xs text-muted-foreground">Size Label</span>
+                  <Input
+                    value={form.fileSizeLabel}
+                    onChange={(e) => setForm((f) => ({ ...f, fileSizeLabel: e.target.value }))}
+                    placeholder="2.4 MB"
+                  />
+                </label>
+              </div>
             </div>
             <label className="block space-y-1 text-sm font-medium">
               Description
@@ -1626,11 +1777,15 @@ export function InstructorMaterialsModule({ data }: { data: InstructorDataHandle
 /* ========================================================================== */
 
 export function InstructorResourcesModule({ data }: { data: InstructorDataHandle }) {
+  const { user } = useAuth();
   const { db, workspace, maps, mutateWorkspace, can } = data;
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<LearningResource | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     title: "",
     type: "pdf" as ResourceType,
@@ -1638,6 +1793,7 @@ export function InstructorResourcesModule({ data }: { data: InstructorDataHandle
     subjectId: "",
     categoryId: "",
     url: "",
+    storagePath: null as string | null,
     fileSizeLabel: "",
     accessLevel: "enrolled" as ResourceAccess,
     description: "",
@@ -1651,7 +1807,68 @@ export function InstructorResourcesModule({ data }: { data: InstructorDataHandle
     });
   }, [workspace?.resources, courseFilter, search]);
 
+  async function uploadSelectedFile(
+    file: File,
+  ): Promise<{ url: string; storagePath: string; sizeLabel: string } | null> {
+    if (!user) {
+      toast.error("You must be signed in to upload resource files.");
+      return null;
+    }
+    setUploading(true);
+    try {
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+      const storagePath = `${user.id}/${crypto.randomUUID()}-${safe}`;
+      const { error } = await supabase.storage.from("course-covers").upload(storagePath, file, {
+        contentType: file.type || "application/octet-stream",
+        upsert: true,
+      });
+      if (error) throw new Error(error.message);
+      const url = courseCoverUrl(storagePath);
+      const sizeKb = Math.max(1, Math.round(file.size / 1024));
+      const sizeLabel = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
+      return { url, storagePath, sizeLabel };
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "File upload failed.");
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleFileSelected(file: File) {
+    setSelectedFile(file);
+    const detectedType = detectResourceType(file.name);
+    const fallbackTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, " ");
+    const newTitle = form.title.trim() ? form.title : fallbackTitle;
+
+    const res = await uploadSelectedFile(file);
+    if (res) {
+      setForm((prev) => ({
+        ...prev,
+        title: newTitle,
+        type: detectedType,
+        url: res.url,
+        storagePath: res.storagePath,
+        fileSizeLabel: res.sizeLabel,
+      }));
+      toast.success(`Uploaded "${file.name}" (${res.sizeLabel})`);
+    }
+  }
+
+  function handleRemoveFile() {
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setForm((prev) => ({
+      ...prev,
+      storagePath: null,
+      fileSizeLabel: "External / Link",
+      url: prev.storagePath && prev.url.includes(prev.storagePath) ? "" : prev.url,
+    }));
+  }
+
   function openEditor(res: LearningResource | null) {
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setEditing(res);
     setForm({
       title: res?.title ?? "",
@@ -1660,6 +1877,7 @@ export function InstructorResourcesModule({ data }: { data: InstructorDataHandle
       subjectId: res?.subjectId ?? "",
       categoryId: res?.categoryId ?? "",
       url: res?.url ?? "",
+      storagePath: res?.storagePath ?? null,
       fileSizeLabel: res?.fileSizeLabel ?? "",
       accessLevel: res?.accessLevel ?? "enrolled",
       description: res?.description ?? "",
@@ -1669,12 +1887,39 @@ export function InstructorResourcesModule({ data }: { data: InstructorDataHandle
 
   async function saveResource(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) return;
-    const cleanUrl = safeHref(form.url);
-    if (form.url.trim() && !cleanUrl) {
-      toast.error("Please enter a valid http/https or relative resource URL.");
+    if (!form.title.trim()) {
+      toast.error("Please enter a title for the resource.");
       return;
     }
+
+    let finalUrl = form.url.trim();
+    let finalStoragePath = form.storagePath;
+    let finalSizeLabel = form.fileSizeLabel;
+
+    if (selectedFile && !finalStoragePath) {
+      const uploadRes = await uploadSelectedFile(selectedFile);
+      if (!uploadRes) return;
+      finalUrl = uploadRes.url;
+      finalStoragePath = uploadRes.storagePath;
+      finalSizeLabel = uploadRes.sizeLabel;
+    }
+
+    if (!finalUrl && !finalStoragePath) {
+      toast.error("Please upload a file or paste a resource URL.");
+      return;
+    }
+
+    if (
+      finalUrl &&
+      !finalUrl.startsWith("/") &&
+      !/^https?:\/\//i.test(finalUrl) &&
+      finalUrl.includes(".")
+    ) {
+      finalUrl = `https://${finalUrl}`;
+    }
+
+    const cleanUrl = safeHref(finalUrl);
+
     await mutateWorkspace(
       {
         type: "upsert_resource",
@@ -1686,8 +1931,8 @@ export function InstructorResourcesModule({ data }: { data: InstructorDataHandle
           subjectId: form.subjectId || null,
           categoryId: form.categoryId || null,
           url: cleanUrl,
-          storagePath: null,
-          fileSizeLabel: form.fileSizeLabel.trim() || "Digital",
+          storagePath: finalStoragePath,
+          fileSizeLabel: finalSizeLabel.trim() || "Digital",
           accessLevel: form.accessLevel,
           description: form.description.trim(),
           createdAt: editing?.createdAt ?? new Date().toISOString(),
@@ -1696,6 +1941,7 @@ export function InstructorResourcesModule({ data }: { data: InstructorDataHandle
       editing ? "E-learning resource updated" : "E-learning resource published",
     );
     setEditorOpen(false);
+    setSelectedFile(null);
   }
 
   return (
@@ -1903,15 +2149,72 @@ export function InstructorResourcesModule({ data }: { data: InstructorDataHandle
                 </select>
               </label>
             </div>
-            <label className="block space-y-1 text-sm font-medium">
-              Resource URL
-              <Input
-                required
-                value={form.url}
-                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                placeholder="https://..."
-              />
-            </label>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Upload File or Paste URL</Label>
+                <span className="text-[11px] font-normal text-muted-foreground">
+                  (Either field is accepted)
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.rtf,.odt,.ods,.odp,.zip,.rar,.7z,.tar,.gz,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp4,.webm,.mov,.mp3,.wav,*/*"
+                    disabled={uploading}
+                    className="cursor-pointer file:cursor-pointer"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void handleFileSelected(f);
+                    }}
+                  />
+                  {uploading && (
+                    <div className="flex shrink-0 items-center gap-1.5 text-xs text-primary font-medium">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Uploading…</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Accepts all file types: PDF, Word, Excel, PowerPoint, CSV, Images, ZIP archives, Video, Audio, or any document.
+                </p>
+
+                {(selectedFile || form.storagePath) && (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs">
+                    <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="truncate">
+                        Attached: {selectedFile?.name || form.storagePath?.split("/").pop()} ({form.fileSizeLabel || "Uploaded"})
+                      </span>
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-destructive hover:bg-destructive/10"
+                      onClick={handleRemoveFile}
+                    >
+                      <X className="mr-1 h-3.5 w-3.5" /> Remove
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1 pt-1">
+                <span className="text-xs text-muted-foreground">Or paste web link / resource URL</span>
+                <Input
+                  value={form.url}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const detected = val.trim() ? detectResourceType(val) : form.type;
+                    setForm((f) => ({ ...f, url: val, type: detected }));
+                  }}
+                  placeholder="https://... or uploaded path"
+                />
+              </div>
+            </div>
             <label className="block space-y-1 text-sm font-medium">
               Description
               <Textarea
@@ -1924,7 +2227,7 @@ export function InstructorResourcesModule({ data }: { data: InstructorDataHandle
               <Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="emerald" disabled={data.mutating}>
+              <Button type="submit" variant="emerald" disabled={data.mutating || uploading}>
                 Save Resource
               </Button>
             </DialogFooter>
