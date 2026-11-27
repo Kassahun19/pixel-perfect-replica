@@ -1,6 +1,6 @@
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
-import { Inbox, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Inbox, Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -154,6 +154,97 @@ export function Pager({ page, pageCount, onPage }: { page: number; pageCount: nu
       <button className="rounded-lg border border-border px-3 py-1.5 disabled:opacity-40" disabled={page >= pageCount} onClick={() => onPage(page + 1)}>
         Next
       </button>
+    </div>
+  );
+}
+
+export function SidebarMenuNav({
+  ariaLabel,
+  children,
+  className,
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  const navRef = useRef<HTMLElement | null>(null);
+  const [scrollState, setScrollState] = useState({ canUp: false, canDown: false });
+
+  const syncScrollState = useCallback(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const canUp = el.scrollTop > 4;
+    const canDown = el.scrollTop + el.clientHeight < el.scrollHeight - 4;
+    setScrollState((prev) =>
+      prev.canUp === canUp && prev.canDown === canDown ? prev : { canUp, canDown },
+    );
+  }, []);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    syncScrollState();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncScrollState) : null;
+    ro?.observe(el);
+    const mo =
+      typeof MutationObserver !== "undefined" ? new MutationObserver(syncScrollState) : null;
+    mo?.observe(el, { childList: true, subtree: true });
+    window.addEventListener("resize", syncScrollState);
+    return () => {
+      ro?.disconnect();
+      mo?.disconnect();
+      window.removeEventListener("resize", syncScrollState);
+    };
+  }, [syncScrollState]);
+
+  const scrollByStep = (delta: number) => {
+    const el = navRef.current;
+    if (!el) return;
+    if (typeof el.scrollBy === "function") {
+      el.scrollBy({ top: delta, behavior: "smooth" });
+    } else {
+      el.scrollTop += delta;
+    }
+    syncScrollState();
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {scrollState.canUp && (
+        <button
+          type="button"
+          onClick={() => scrollByStep(-180)}
+          aria-label="Scroll sidebar menu up"
+          className="mb-1 flex w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-border/70 bg-secondary/60 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          <ChevronUp className="h-3.5 w-3.5" />
+          <span>Scroll up</span>
+        </button>
+      )}
+
+      <nav
+        ref={navRef}
+        aria-label={ariaLabel}
+        onScroll={syncScrollState}
+        className={cn(
+          "sidebar-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-scroll overscroll-contain pr-1.5",
+          className,
+        )}
+      >
+        {children}
+      </nav>
+
+      {scrollState.canDown && (
+        <button
+          type="button"
+          onClick={() => scrollByStep(180)}
+          aria-label="Scroll sidebar menu down"
+          className="mt-1 flex w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-border/70 bg-secondary/60 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          <ChevronDown className="h-3.5 w-3.5" />
+          <span>Scroll down</span>
+        </button>
+      )}
     </div>
   );
 }

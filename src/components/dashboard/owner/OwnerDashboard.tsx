@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useRef } from "react";
 import {
   Bell,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   GraduationCap,
   LogOut,
   Menu,
@@ -107,6 +109,7 @@ export function OwnerDashboard({
   const [menuSearch, setMenuSearch] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const navRef = useRef<HTMLDivElement>(null);
 
   const isOwner = role === "owner" || roles.includes("owner");
   const roleNavGroups = useMemo(() => getNavGroupsForRole(role), [role]);
@@ -273,9 +276,36 @@ export function OwnerDashboard({
         />
       </div>
 
+      <div className="flex items-center justify-between px-1 mb-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Menus</span>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-6 w-6 rounded-md"
+            title="Scroll Up"
+            onClick={() => navRef.current?.scrollBy({ top: -160, behavior: "smooth" })}
+          >
+            <ChevronUp className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-6 w-6 rounded-md"
+            title="Scroll Down"
+            onClick={() => navRef.current?.scrollBy({ top: 160, behavior: "smooth" })}
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
       <nav
+        ref={navRef}
         aria-label={`${ROLE_LABEL[role]} dashboard navigation`}
-        className="flex-1 space-y-1.5 overflow-y-auto pr-1"
+        className="flex-1 space-y-1.5 overflow-y-auto pr-1 sidebar-scrollbar"
       >
         {visibleGroups.map((group) => {
           const GroupIcon = group.icon;
