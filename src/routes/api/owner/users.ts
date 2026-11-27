@@ -65,6 +65,10 @@ export const Route = createFileRoute("/api/owner/users")({
             );
           }
 
+          const normalizedEmail = payload.email.trim().toLowerCase();
+          const duplicateMsg =
+            "A user with this email address has already been registered. Edit the existing user in User Management instead.";
+
           if (auth.isMock || !serviceKey || !supabaseUrl) {
             if (!auth.isMock && (!serviceKey || !supabaseUrl)) {
               return Response.json(
@@ -75,10 +79,18 @@ export const Route = createFileRoute("/api/owner/users")({
                 { status: 400 },
               );
             }
+            const { data: existingMock } = await auth.supabase
+              .from("profiles")
+              .select("id")
+              .eq("email", normalizedEmail)
+              .limit(1);
+            if ((existingMock ?? []).length > 0) {
+              return Response.json({ error: duplicateMsg }, { status: 409 });
+            }
             const newId = crypto.randomUUID();
             const { error: profErr } = await auth.supabase.from("profiles").insert({
               id: newId,
-              email: payload.email.toLowerCase(),
+              email: normalizedEmail,
               first_name: payload.first_name,
               last_name: payload.last_name,
               phone: payload.phone || null,
@@ -89,14 +101,23 @@ export const Route = createFileRoute("/api/owner/users")({
               .from("user_roles")
               .insert({ user_id: newId, role: payload.role as AppRole });
             await recordServerAudit(auth.supabase, auth.userId, "user_created", "profile", newId, {
-              email: payload.email,
+              email: normalizedEmail,
               role: payload.role,
             });
             return Response.json({ ok: true, userId: newId }, { status: 200 });
           }
 
+          const { data: existingProfile } = await supabaseAdmin
+            .from("profiles")
+            .select("id")
+            .eq("email", normalizedEmail)
+            .limit(1);
+          if ((existingProfile ?? []).length > 0) {
+            return Response.json({ error: duplicateMsg }, { status: 409 });
+          }
+
           const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-            email: payload.email.toLowerCase(),
+            email: normalizedEmail,
             password: payload.password,
             email_confirm: true,
             user_metadata: {
@@ -105,9 +126,12 @@ export const Route = createFileRoute("/api/owner/users")({
             },
           });
           if (createErr || !created.user) {
+            const rawMsg = createErr?.message ?? "Could not create user account.";
+            const isDuplicate =
+              /already\s+(been\s+)?registered|already\s+exists|email_exists/i.test(rawMsg);
             return Response.json(
-              { error: createErr?.message ?? "Could not create user account." },
-              { status: 400 },
+              { error: isDuplicate ? duplicateMsg : rawMsg },
+              { status: isDuplicate ? 409 : 400 },
             );
           }
           const uid = created.user.id;

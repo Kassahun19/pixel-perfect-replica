@@ -121,19 +121,23 @@ export function UserRolesModule({
       toast.error("Only the Academy Owner can assign or modify Owner accounts.");
       return;
     }
-    await callUserApi(
-      {
-        action: "update",
-        user_id: userId,
-        first_name: target.first_name || "User",
-        last_name: target.last_name || "Account",
-        phone: target.phone,
-        bio: target.bio,
-        status: target.status,
-        roles: [newRole],
-      },
-      `Assigned ${ROLE_LABEL[newRole]} role to ${displayName(target)}`,
-    );
+    try {
+      await callUserApi(
+        {
+          action: "update",
+          user_id: userId,
+          first_name: target.first_name || "User",
+          last_name: target.last_name || "Account",
+          phone: target.phone,
+          bio: target.bio,
+          status: target.status,
+          roles: [newRole],
+        },
+        `Assigned ${ROLE_LABEL[newRole]} role to ${displayName(target)}`,
+      );
+    } catch {
+      // Error toast displayed by callUserApi.
+    }
   }
 
   return (

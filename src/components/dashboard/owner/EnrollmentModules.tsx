@@ -299,18 +299,32 @@ export function EnrollmentModules({
       toast.error("Initial password must be at least 8 characters.");
       return;
     }
+    const normalizedEmail = regForm.email.trim().toLowerCase();
+    if (db.profiles.some((p) => p.email.trim().toLowerCase() === normalizedEmail)) {
+      toast.error(
+        "A user with this email address has already been registered. Enroll the existing student directly instead.",
+      );
+      return;
+    }
     setBusy(true);
+    let userApiToasted = false;
     try {
-      const res = (await callUserApi({
-        action: "create",
-        first_name: regForm.first_name.trim(),
-        last_name: regForm.last_name.trim(),
-        email: regForm.email.trim(),
-        phone: regForm.phone.trim(),
-        password: regForm.password,
-        role: "student",
-        status: "active",
-      })) as { userId?: string };
+      let res: { userId?: string };
+      try {
+        res = (await callUserApi({
+          action: "create",
+          first_name: regForm.first_name.trim(),
+          last_name: regForm.last_name.trim(),
+          email: normalizedEmail,
+          phone: regForm.phone.trim(),
+          password: regForm.password,
+          role: "student",
+          status: "active",
+        })) as { userId?: string };
+      } catch (err) {
+        userApiToasted = true;
+        throw err;
+      }
 
       if (res?.userId) {
         await mutateWorkspace({
@@ -364,7 +378,9 @@ export function EnrollmentModules({
         notes: "",
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not complete registration.");
+      if (!userApiToasted) {
+        toast.error(err instanceof Error ? err.message : "Could not complete registration.");
+      }
     } finally {
       setBusy(false);
     }

@@ -110,23 +110,35 @@ export function UserManagementModule({ data }: { data: OwnerDataHandle }) {
       toast.error("Password must be at least 8 characters.");
       return;
     }
-    await callUserApi(
-      {
-        action: "create",
-        ...createForm,
-      },
-      `Account created for ${createForm.first_name} ${createForm.last_name}`,
-    );
-    setCreateOpen(false);
-    setCreateForm({
-      first_name: "",
-      last_name: "",
-      email: "",
-      phone: "",
-      password: "",
-      role: "student",
-      status: "active",
-    });
+    const normalizedEmail = createForm.email.trim().toLowerCase();
+    if (db.profiles.some((p) => p.email.trim().toLowerCase() === normalizedEmail)) {
+      toast.error(
+        "A user with this email address has already been registered. Edit the existing user instead.",
+      );
+      return;
+    }
+    try {
+      await callUserApi(
+        {
+          action: "create",
+          ...createForm,
+          email: normalizedEmail,
+        },
+        `Account created for ${createForm.first_name} ${createForm.last_name}`,
+      );
+      setCreateOpen(false);
+      setCreateForm({
+        first_name: "",
+        last_name: "",
+        email: "",
+        phone: "",
+        password: "",
+        role: "student",
+        status: "active",
+      });
+    } catch {
+      // Error toast is displayed by callUserApi; keep dialog open so the email can be corrected.
+    }
   }
 
   function openEdit(p: ProfileRow) {
@@ -148,37 +160,45 @@ export function UserManagementModule({ data }: { data: OwnerDataHandle }) {
       toast.error("Assign at least one role.");
       return;
     }
-    await callUserApi(
-      {
-        action: "update",
-        user_id: editing.id,
-        first_name: editForm.first_name.trim(),
-        last_name: editForm.last_name.trim(),
-        phone: editForm.phone.trim() || null,
-        bio: editForm.bio.trim() || null,
-        status: editForm.status,
-        roles: editForm.roles,
-      },
-      "User account updated",
-    );
-    setEditing(null);
+    try {
+      await callUserApi(
+        {
+          action: "update",
+          user_id: editing.id,
+          first_name: editForm.first_name.trim(),
+          last_name: editForm.last_name.trim(),
+          phone: editForm.phone.trim() || null,
+          bio: editForm.bio.trim() || null,
+          status: editForm.status,
+          roles: editForm.roles,
+        },
+        "User account updated",
+      );
+      setEditing(null);
+    } catch {
+      // Error toast displayed by callUserApi.
+    }
   }
 
   async function handleQuickStatus(p: ProfileRow, status: ProfileRow["status"]) {
     const roles = maps.rolesByUser.get(p.id) ?? ["student"];
-    await callUserApi(
-      {
-        action: "update",
-        user_id: p.id,
-        first_name: p.first_name || "User",
-        last_name: p.last_name || "Account",
-        phone: p.phone,
-        bio: p.bio,
-        status,
-        roles,
-      },
-      `${displayName(p)} marked ${status}`,
-    );
+    try {
+      await callUserApi(
+        {
+          action: "update",
+          user_id: p.id,
+          first_name: p.first_name || "User",
+          last_name: p.last_name || "Account",
+          phone: p.phone,
+          bio: p.bio,
+          status,
+          roles,
+        },
+        `${displayName(p)} marked ${status}`,
+      );
+    } catch {
+      // Error toast displayed by callUserApi.
+    }
   }
 
   return (
@@ -344,7 +364,7 @@ export function UserManagementModule({ data }: { data: OwnerDataHandle }) {
                                     void callUserApi(
                                       { action: "delete", user_id: person.id },
                                       "User account removed",
-                                    )
+                                    ).catch(() => undefined)
                                   }
                                   trigger={
                                     <Button
@@ -651,70 +671,89 @@ export function StudentRecordsModule({ data }: { data: OwnerDataHandle }) {
   async function saveStudentRecord(e: React.FormEvent) {
     e.preventDefault();
     if (!editStudent) return;
-    await callUserApi({
-      action: "update",
-      user_id: editStudent.id,
-      first_name: editForm.first_name.trim(),
-      last_name: editForm.last_name.trim(),
-      phone: editForm.phone.trim() || null,
-      bio: editStudent.bio,
-      status: editForm.status,
-      roles: maps.rolesByUser.get(editStudent.id) ?? ["student"],
-    });
-    await mutateWorkspace(
-      {
-        type: "upsert_student_meta",
-        payload: {
-          userId: editStudent.id,
-          studentCode:
-            editForm.studentCode.trim() || `STU-${editStudent.id.slice(0, 6).toUpperCase()}`,
-          classSectionId: editForm.classSectionId || null,
-          academicYearId: editForm.academicYearId || null,
-          guardianName: editForm.guardianName.trim(),
-          guardianPhone: editForm.guardianPhone.trim(),
-          address: editForm.address.trim(),
-          dateOfBirth: editForm.dateOfBirth,
-          notes: editForm.notes.trim(),
+    try {
+      await callUserApi({
+        action: "update",
+        user_id: editStudent.id,
+        first_name: editForm.first_name.trim(),
+        last_name: editForm.last_name.trim(),
+        phone: editForm.phone.trim() || null,
+        bio: editStudent.bio,
+        status: editForm.status,
+        roles: maps.rolesByUser.get(editStudent.id) ?? ["student"],
+      });
+      await mutateWorkspace(
+        {
+          type: "upsert_student_meta",
+          payload: {
+            userId: editStudent.id,
+            studentCode:
+              editForm.studentCode.trim() || `STU-${editStudent.id.slice(0, 6).toUpperCase()}`,
+            classSectionId: editForm.classSectionId || null,
+            academicYearId: editForm.academicYearId || null,
+            guardianName: editForm.guardianName.trim(),
+            guardianPhone: editForm.guardianPhone.trim(),
+            address: editForm.address.trim(),
+            dateOfBirth: editForm.dateOfBirth,
+            notes: editForm.notes.trim(),
+          },
         },
-      },
-      "Student record saved",
-    );
-    setEditStudent(null);
+        "Student record saved",
+      );
+      setEditStudent(null);
+    } catch {
+      // Error toast displayed by callUserApi/mutateWorkspace.
+    }
   }
 
   async function handleRegisterStudent(e: React.FormEvent) {
     e.preventDefault();
-    const res = (await callUserApi(
-      {
-        action: "create",
-        first_name: newStudent.first_name,
-        last_name: newStudent.last_name,
-        email: newStudent.email,
-        phone: newStudent.phone,
-        password: newStudent.password,
-        role: "student",
-        status: "active",
-      },
-      "Student registered",
-    )) as { userId?: string };
-
-    if (res?.userId) {
-      await mutateWorkspace({
-        type: "upsert_student_meta",
-        payload: {
-          userId: res.userId,
-          studentCode: newStudent.studentCode || `STU-${res.userId.slice(0, 6).toUpperCase()}`,
-          classSectionId: newStudent.classSectionId || null,
-          academicYearId: workspace?.academicYears.find((y) => y.isCurrent)?.id ?? null,
-          guardianName: newStudent.guardianName,
-          guardianPhone: newStudent.guardianPhone,
-          address: "",
-          dateOfBirth: "",
-          notes: "",
-        },
-      });
+    if (newStudent.password.length < 8) {
+      toast.error("Password must be at least 8 characters.");
+      return;
     }
-    setRegisterOpen(false);
+    const normalizedEmail = newStudent.email.trim().toLowerCase();
+    if (db.profiles.some((p) => p.email.trim().toLowerCase() === normalizedEmail)) {
+      toast.error(
+        "A user with this email address has already been registered. Search for them in Student Records instead.",
+      );
+      return;
+    }
+    try {
+      const res = (await callUserApi(
+        {
+          action: "create",
+          first_name: newStudent.first_name,
+          last_name: newStudent.last_name,
+          email: normalizedEmail,
+          phone: newStudent.phone,
+          password: newStudent.password,
+          role: "student",
+          status: "active",
+        },
+        "Student registered",
+      )) as { userId?: string };
+
+      if (res?.userId) {
+        await mutateWorkspace({
+          type: "upsert_student_meta",
+          payload: {
+            userId: res.userId,
+            studentCode: newStudent.studentCode || `STU-${res.userId.slice(0, 6).toUpperCase()}`,
+            classSectionId: newStudent.classSectionId || null,
+            academicYearId: workspace?.academicYears.find((y) => y.isCurrent)?.id ?? null,
+            guardianName: newStudent.guardianName,
+            guardianPhone: newStudent.guardianPhone,
+            address: "",
+            dateOfBirth: "",
+            notes: "",
+          },
+        });
+      }
+      setRegisterOpen(false);
+    } catch {
+      // Error toast displayed by callUserApi.
+    }
   }
 
   function exportStudents() {
@@ -1292,54 +1331,73 @@ export function InstructorManagementModule({ data }: { data: OwnerDataHandle }) 
 
   async function handleAddInstructor(e: React.FormEvent) {
     e.preventDefault();
-    const res = (await callUserApi(
-      {
-        action: "create",
-        first_name: newInst.first_name,
-        last_name: newInst.last_name,
-        email: newInst.email,
-        phone: newInst.phone,
-        password: newInst.password,
-        role: "instructor",
-        status: "active",
-      },
-      "Instructor account created",
-    )) as { userId?: string };
-
-    if (res?.userId) {
-      await mutateWorkspace({
-        type: "upsert_instructor_meta",
-        payload: {
-          userId: res.userId,
-          qualifications: newInst.qualifications,
-          experienceYears: Number(newInst.experienceYears) || 0,
-          expertise: newInst.expertise
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-          departmentId: workspace?.departments[0]?.id ?? null,
-          weeklyHoursLimit: 20,
-          scheduleSummary: "Mon–Fri flexible online/lab hours",
-          hourlyRate: 0,
-        },
-      });
+    if (newInst.password.length < 8) {
+      toast.error("Password must be at least 8 characters.");
+      return;
     }
-    setAddOpen(false);
+    const normalizedEmail = newInst.email.trim().toLowerCase();
+    if (db.profiles.some((p) => p.email.trim().toLowerCase() === normalizedEmail)) {
+      toast.error(
+        "A user with this email address has already been registered. Assign the Instructor role to their existing account instead.",
+      );
+      return;
+    }
+    try {
+      const res = (await callUserApi(
+        {
+          action: "create",
+          first_name: newInst.first_name,
+          last_name: newInst.last_name,
+          email: normalizedEmail,
+          phone: newInst.phone,
+          password: newInst.password,
+          role: "instructor",
+          status: "active",
+        },
+        "Instructor account created",
+      )) as { userId?: string };
+
+      if (res?.userId) {
+        await mutateWorkspace({
+          type: "upsert_instructor_meta",
+          payload: {
+            userId: res.userId,
+            qualifications: newInst.qualifications,
+            experienceYears: Number(newInst.experienceYears) || 0,
+            expertise: newInst.expertise
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            departmentId: workspace?.departments[0]?.id ?? null,
+            weeklyHoursLimit: 20,
+            scheduleSummary: "Mon–Fri flexible online/lab hours",
+            hourlyRate: 0,
+          },
+        });
+      }
+      setAddOpen(false);
+    } catch {
+      // Error toast displayed by callUserApi.
+    }
   }
 
   async function saveInstructor(e: React.FormEvent) {
     e.preventDefault();
     if (!editing) return;
-    await callUserApi({
-      action: "update",
-      user_id: editing.id,
-      first_name: editing.first_name,
-      last_name: editing.last_name,
-      phone: editing.phone,
-      bio: editing.bio,
-      status: editForm.status,
-      roles: maps.rolesByUser.get(editing.id) ?? ["instructor"],
-    });
+    try {
+      await callUserApi({
+        action: "update",
+        user_id: editing.id,
+        first_name: editing.first_name,
+        last_name: editing.last_name,
+        phone: editing.phone,
+        bio: editing.bio,
+        status: editForm.status,
+        roles: maps.rolesByUser.get(editing.id) ?? ["instructor"],
+      });
+    } catch {
+      return;
+    }
 
     // Update course instructor assignments in Supabase
     for (const course of db.courses) {
@@ -1724,16 +1782,32 @@ export function ParentManagementModule({ data }: { data: OwnerDataHandle }) {
 
   async function handleCreateParent(e: React.FormEvent) {
     e.preventDefault();
-    await callUserApi(
-      {
-        action: "create",
-        ...newParent,
-        role: "parent",
-        status: "active",
-      },
-      "Parent account created",
-    );
-    setCreateOpen(false);
+    if (newParent.password.length < 8) {
+      toast.error("Password must be at least 8 characters.");
+      return;
+    }
+    const normalizedEmail = newParent.email.trim().toLowerCase();
+    if (db.profiles.some((p) => p.email.trim().toLowerCase() === normalizedEmail)) {
+      toast.error(
+        "A user with this email address has already been registered. Assign the Parent role to their existing account instead.",
+      );
+      return;
+    }
+    try {
+      await callUserApi(
+        {
+          action: "create",
+          ...newParent,
+          email: normalizedEmail,
+          role: "parent",
+          status: "active",
+        },
+        "Parent account created",
+      );
+      setCreateOpen(false);
+    } catch {
+      // Error toast displayed by callUserApi.
+    }
   }
 
   async function handleLinkChild(e: React.FormEvent) {
@@ -1771,19 +1845,23 @@ export function ParentManagementModule({ data }: { data: OwnerDataHandle }) {
 
   async function toggleParentStatus(p: ProfileRow) {
     const nextStatus = p.status === "active" ? "suspended" : "active";
-    await callUserApi(
-      {
-        action: "update",
-        user_id: p.id,
-        first_name: p.first_name,
-        last_name: p.last_name,
-        phone: p.phone,
-        bio: p.bio,
-        status: nextStatus,
-        roles: maps.rolesByUser.get(p.id) ?? ["parent"],
-      },
-      `Parent account ${nextStatus}`,
-    );
+    try {
+      await callUserApi(
+        {
+          action: "update",
+          user_id: p.id,
+          first_name: p.first_name,
+          last_name: p.last_name,
+          phone: p.phone,
+          bio: p.bio,
+          status: nextStatus,
+          roles: maps.rolesByUser.get(p.id) ?? ["parent"],
+        },
+        `Parent account ${nextStatus}`,
+      );
+    } catch {
+      // Error toast displayed by callUserApi.
+    }
   }
 
   return (
