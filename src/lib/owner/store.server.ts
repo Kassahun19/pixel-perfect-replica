@@ -20,6 +20,7 @@ import type {
   AcademicYear,
   AccountPreferences,
   AssignmentSubmission,
+  AttendanceDispute,
   AttendanceRecord,
   CertificateTemplate,
   ClassSection,
@@ -49,6 +50,7 @@ import type {
   PaymentReminder,
   PermissionAction,
   PermissionModule,
+  ProfileCorrectionRequest,
   QuestionBankItem,
   RolePermissionMatrix,
   StudentRecordMeta,
@@ -325,6 +327,7 @@ function createInitialWorkspaceState(): OwnerWorkspaceState {
       },
     ],
     attendance: [],
+    attendanceDisputes: [],
     gradingScales,
     grades: [],
     resources: [],
@@ -386,6 +389,7 @@ function createInitialWorkspaceState(): OwnerWorkspaceState {
     discussionPosts: [],
     instructorPayouts: [],
     courseCompletions: [],
+    profileCorrectionRequests: [],
   };
 }
 
@@ -407,6 +411,16 @@ function ensureWorkspaceLoaded(): OwnerWorkspaceState {
           ...fallback.rolePermissions[roleKey],
           ...(parsed.rolePermissions?.[roleKey] ?? {}),
         };
+      }
+      const savedStudent = parsed.rolePermissions?.student;
+      if (
+        savedStudent &&
+        !savedStudent.attendance?.view &&
+        !savedStudent.finance?.view &&
+        !savedStudent.communication?.view &&
+        !savedStudent.enrollments?.view
+      ) {
+        mergedRolePerms.student = fallback.rolePermissions.student;
       }
       cachedState = {
         ...fallback,
@@ -432,6 +446,9 @@ function ensureWorkspaceLoaded(): OwnerWorkspaceState {
         discussionPosts: parsed.discussionPosts ?? fallback.discussionPosts,
         instructorPayouts: parsed.instructorPayouts ?? fallback.instructorPayouts,
         courseCompletions: parsed.courseCompletions ?? fallback.courseCompletions,
+        attendanceDisputes: parsed.attendanceDisputes ?? fallback.attendanceDisputes,
+        profileCorrectionRequests:
+          parsed.profileCorrectionRequests ?? fallback.profileCorrectionRequests,
       };
       // Ensure owner permissions remain unrestricted
       for (const mod of ALL_PERMISSION_MODULES) {
@@ -751,7 +768,15 @@ export type WorkspaceMutationPayload =
   | { type: "moderate_discussion_post"; id: string; hidden: boolean }
   | { type: "upsert_instructor_payout"; payload: InstructorPayout }
   | { type: "delete_instructor_payout"; id: string }
-  | { type: "upsert_course_completion"; payload: CourseCompletionRecord };
+  | { type: "upsert_course_completion"; payload: CourseCompletionRecord }
+  | {
+      type: "report_attendance_discrepancy";
+      payload: Omit<AttendanceDispute, "id" | "status" | "createdAt">;
+    }
+  | {
+      type: "request_profile_correction";
+      payload: Omit<ProfileCorrectionRequest, "id" | "status" | "createdAt">;
+    };
 
 export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload): {
   module: PermissionModule;
@@ -859,7 +884,10 @@ export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload)
       return { module: "communication", action: "delete" };
     case "mark_notification_read":
     case "update_account_prefs":
+    case "request_profile_correction":
       return { module: "overview", action: "view" };
+    case "report_attendance_discrepancy":
+      return { module: "attendance", action: "view" };
     case "update_role_permissions":
     case "update_system_settings":
     case "update_academy_ext":
@@ -1674,6 +1702,57 @@ export function applyWorkspaceMutation(
       entity = "course_completion";
       entityId = mutation.payload.id;
       break;
+    case "report_attendance_discrepancy": {
+      const dispute: AttendanceDispute = {
+        ...mutation.payload,
+        id: crypto.randomUUID(),
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      };
+      next.attendanceDisputes = [dispute, ...next.attendanceDisputes];
+      next.notifications = [
+        {
+          id: crypto.randomUUID(),
+          title: "Attendance Discrepancy Reported",
+          message: `A student flagged attendance on ${dispute.date}: ${dispute.reason}`,
+          category: "academic",
+          targetRole: "instructor",
+          targetClassId: null,
+          targetCourseId: dispute.courseId,
+          readBy: [],
+          createdAt: dispute.createdAt,
+        },
+        ...next.notifications,
+      ];
+      entity = "attendance_dispute";
+      entityId = dispute.id;
+      break;
+    }
+    case "request_profile_correction": {
+      const req: ProfileCorrectionRequest = {
+        ...mutation.payload,
+        id: crypto.randomUUID(),
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      };
+      next.profileCorrectionRequests = [req, ...next.profileCorrectionRequests];
+      next.notifications = [
+        {
+          id: crypto.randomUUID(),
+          title: "Student Profile Correction Request",
+          message: `Requested change to ${req.field}: "${req.requestedValue}" (${req.reason})`,
+          category: "system",
+          targetRole: "admin",
+          targetClassId: null,
+          readBy: [],
+          createdAt: req.createdAt,
+        },
+        ...next.notifications,
+      ];
+      entity = "profile_correction";
+      entityId = req.id;
+      break;
+    }
   }
 
   persistWorkspaceState(next);

@@ -150,20 +150,49 @@ export function createDefaultRolePermissions(): RolePermissionMatrix {
     ]),
   ) as Record<PermissionModule, ModulePermissions>;
 
-  const studentModules = Object.fromEntries(
-    ALL_PERMISSION_MODULES.map((m) => [
-      m,
-      m === "overview" ||
-      m === "courses" ||
-      m === "resources" ||
-      m === "grades" ||
-      m === "timetables" ||
-      m === "exams" ||
-      m === "certificates"
-        ? readOnlyPerms(false)
-        : nonePerms(),
-    ]),
-  ) as Record<PermissionModule, ModulePermissions>;
+  const studentModules: Record<PermissionModule, ModulePermissions> = {
+    overview: readOnlyPerms(false),
+    reports: nonePerms(),
+    users: nonePerms(),
+    students: nonePerms(),
+    instructors: nonePerms(),
+    parents: nonePerms(),
+    academics: readOnlyPerms(false),
+    courses: readOnlyPerms(false),
+    subjects: readOnlyPerms(false),
+    timetables: readOnlyPerms(false),
+    attendance: readOnlyPerms(false),
+    grades: readOnlyPerms(true),
+    exams: { view: true, create: true, edit: true, delete: false, export: false, approve: false },
+    resources: readOnlyPerms(false),
+    certificates: readOnlyPerms(true),
+    enrollments: {
+      view: true,
+      create: true,
+      edit: false,
+      delete: false,
+      export: false,
+      approve: false,
+    },
+    finance: {
+      view: true,
+      create: true,
+      edit: false,
+      delete: false,
+      export: true,
+      approve: false,
+    },
+    communication: {
+      view: true,
+      create: true,
+      edit: false,
+      delete: false,
+      export: false,
+      approve: false,
+    },
+    platform: nonePerms(),
+    audit: nonePerms(),
+  };
 
   return {
     owner: ownerModules,

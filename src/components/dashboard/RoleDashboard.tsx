@@ -33,6 +33,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ConfirmButton, EmptyState, ErrorBlock, LoadingBlock, PageHeader, Panel, StatCard } from "@/components/dashboard/ui";
 import { OwnerDashboard } from "./owner/OwnerDashboard";
 import { InstructorDashboard } from "./instructor/InstructorDashboard";
+import { StudentDashboard } from "./student/StudentDashboard";
 
 type Profile = Tables<"profiles">;
 type UserRole = Tables<"user_roles">;
@@ -218,6 +219,16 @@ export function RoleDashboard() {
   if (role === "instructor") {
     return (
       <InstructorDashboard
+        role={role}
+        roles={roles}
+        onSwitchRole={(nextRole) => setPickedRole(nextRole)}
+      />
+    );
+  }
+
+  if (role === "student") {
+    return (
+      <StudentDashboard
         role={role}
         roles={roles}
         onSwitchRole={(nextRole) => setPickedRole(nextRole)}

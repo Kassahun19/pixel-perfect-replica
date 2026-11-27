@@ -466,6 +466,7 @@ export interface ExamSubmission {
   submittedAt: string | null;
   gradedAt: string | null;
   feedback: string;
+  answers?: Record<string, string>;
 }
 
 export interface CertificateTemplate {
@@ -532,6 +533,7 @@ export interface LiveClassSession {
   startTime: string;
   endTime: string;
   meetingUrl: string;
+  recordingUrl?: string;
   status: "scheduled" | "live" | "ended" | "cancelled";
   participantIds: string[];
   attachedMaterialIds: string[];
@@ -639,6 +641,27 @@ export interface CourseCompletionRecord {
   updatedAt: string;
 }
 
+export interface AttendanceDispute {
+  id: string;
+  attendanceId: string;
+  studentId: string;
+  courseId: string | null;
+  date: string;
+  reason: string;
+  status: "pending" | "reviewed" | "resolved";
+  createdAt: string;
+}
+
+export interface ProfileCorrectionRequest {
+  id: string;
+  studentId: string;
+  field: "studentCode" | "dateOfBirth" | "classSection" | "guardianName" | "other";
+  requestedValue: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+}
+
 export interface OwnerWorkspaceState {
   academicYears: AcademicYear[];
   terms: AcademicTerm[];
@@ -651,6 +674,7 @@ export interface OwnerWorkspaceState {
   courseMeta: Record<string, CourseExtensionMeta>;
   timetables: TimetableSlot[];
   attendance: AttendanceRecord[];
+  attendanceDisputes: AttendanceDispute[];
   gradingScales: GradingScale[];
   grades: GradeEntry[];
   resources: LearningResource[];
@@ -683,6 +707,7 @@ export interface OwnerWorkspaceState {
   discussionPosts: CourseDiscussionPost[];
   instructorPayouts: InstructorPayout[];
   courseCompletions: CourseCompletionRecord[];
+  profileCorrectionRequests: ProfileCorrectionRequest[];
 }
 
 export type ProfileRow = Tables<"profiles">;
