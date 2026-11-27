@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import {
   getAcademySettings,
+  getAcademyStats,
   getPublicCourse,
   listPublicCategories,
   listPublicCourses,
@@ -9,6 +10,12 @@ import {
 export const coursesQuery = queryOptions({
   queryKey: ["public", "courses"],
   queryFn: () => listPublicCourses(),
+  staleTime: 60_000,
+});
+
+export const statsQuery = queryOptions({
+  queryKey: ["public", "stats"],
+  queryFn: () => getAcademyStats(),
   staleTime: 60_000,
 });
 

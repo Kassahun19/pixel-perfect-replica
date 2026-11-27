@@ -4,7 +4,7 @@ import { ArrowRight, Award, BookOpenCheck, Crown, GraduationCap, PlayCircle, Shi
 import { PublicLayout } from "@/components/site/PublicLayout";
 import { CourseCard } from "@/components/site/CourseCard";
 import { Button } from "@/components/ui/button";
-import { coursesQuery } from "@/lib/queries";
+import { coursesQuery, statsQuery } from "@/lib/queries";
 import { FREE_LESSON_LIMIT, formatETB } from "@/lib/access";
 import hero from "@/assets/ezana-hero.jpg";
 
@@ -22,7 +22,11 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  loader: ({ context }) => context.queryClient.ensureQueryData(coursesQuery),
+  loader: ({ context }) =>
+    Promise.all([
+      context.queryClient.ensureQueryData(coursesQuery),
+      context.queryClient.ensureQueryData(statsQuery),
+    ]),
   component: Home,
 });
 
@@ -43,6 +47,14 @@ const TESTIMONIALS = [
 
 function Home() {
   const { data: courses } = useSuspenseQuery(coursesQuery);
+  const { data: stats } = useSuspenseQuery(statsQuery);
+  const learnersLabel =
+    stats.learnersCount >= 1000
+      ? `${(stats.learnersCount / 1000).toFixed(1)}k+`
+      : `${stats.learnersCount}+`;
+  const coursesLabel = `${stats.coursesCount}+`;
+  const ratingLabel = `${stats.rating.toFixed(1)}★`;
+
   return (
     <PublicLayout>
       {/* Hero */}
@@ -74,9 +86,9 @@ function Home() {
             </div>
             <div className="mt-12 grid max-w-md animate-fade-up grid-cols-3 gap-6 [animation-delay:400ms]">
               {[
-                ["12k+", "Learners"],
-                [`${courses.length}+`, "Courses"],
-                ["4.9★", "Rating"],
+                [learnersLabel, "Learners"],
+                [coursesLabel, "Courses"],
+                [ratingLabel, "Rating"],
               ].map(([n, l]) => (
                 <div key={l}>
                   <p className="font-display text-3xl font-semibold text-gold">{n}</p>
