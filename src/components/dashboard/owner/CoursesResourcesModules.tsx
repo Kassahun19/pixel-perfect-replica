@@ -154,9 +154,13 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
     setSelectedVideoIds([]);
     setGeneratedPreview(undefined);
     const meta = course ? workspace?.courseMeta[course.id] : undefined;
-    const savedKey = course ? localStorage.getItem(`ezana_yt_key_${course.id}`) ?? meta?.youtubeApiKey ?? "" : "";
-    const savedChannel = course ? localStorage.getItem(`ezana_yt_channel_${course.id}`) ?? meta?.youtubeChannelId ?? "" : "";
-    const savedPlaylist = course ? localStorage.getItem(`ezana_yt_playlist_${course.id}`) ?? meta?.youtubePlaylistId ?? "" : "";
+    const globalKey = localStorage.getItem("ezana_yt_key_global") ?? "";
+    const globalChannel = localStorage.getItem("ezana_yt_channel_global") ?? "";
+    const globalPlaylist = localStorage.getItem("ezana_yt_playlist_global") ?? "";
+
+    const savedKey = course ? (localStorage.getItem(`ezana_yt_key_${course.id}`) ?? meta?.youtubeApiKey ?? globalKey) : globalKey;
+    const savedChannel = course ? (localStorage.getItem(`ezana_yt_channel_${course.id}`) ?? meta?.youtubeChannelId ?? globalChannel) : globalChannel;
+    const savedPlaylist = course ? (localStorage.getItem(`ezana_yt_playlist_${course.id}`) ?? meta?.youtubePlaylistId ?? globalPlaylist) : globalPlaylist;
     setForm({
       title: course?.title ?? "",
       slug: course?.slug ?? "",
@@ -409,6 +413,16 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
       const savedId = editing?.id ?? ("data" in res ? res.data?.id : undefined);
 
       if (savedId) {
+        if (form.youtubeApiKey.trim()) {
+          localStorage.setItem("ezana_yt_key_global", form.youtubeApiKey.trim());
+        }
+        if (form.youtubeChannelId.trim()) {
+          localStorage.setItem("ezana_yt_channel_global", form.youtubeChannelId.trim());
+        }
+        if (form.youtubePlaylistId.trim()) {
+          localStorage.setItem("ezana_yt_playlist_global", form.youtubePlaylistId.trim());
+        }
+
         localStorage.setItem(`ezana_yt_key_${savedId}`, form.youtubeApiKey.trim());
         localStorage.setItem(`ezana_yt_channel_${savedId}`, form.youtubeChannelId.trim());
         localStorage.setItem(`ezana_yt_playlist_${savedId}`, form.youtubePlaylistId.trim());

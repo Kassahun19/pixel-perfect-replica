@@ -298,6 +298,10 @@ export function RoleDashboard() {
     }
     const savedCourseId = course?.id ?? ("data" in result ? result.data?.id : undefined);
     if (savedCourseId) {
+      if (values.youtubeApiKey.trim()) localStorage.setItem("ezana_yt_key_global", values.youtubeApiKey.trim());
+      if (values.youtubeChannelId.trim()) localStorage.setItem("ezana_yt_channel_global", values.youtubeChannelId.trim());
+      if (values.youtubePlaylistId.trim()) localStorage.setItem("ezana_yt_playlist_global", values.youtubePlaylistId.trim());
+
       localStorage.setItem(`ezana_yt_key_${savedCourseId}`, values.youtubeApiKey.trim());
       localStorage.setItem(`ezana_yt_channel_${savedCourseId}`, values.youtubeChannelId.trim());
       localStorage.setItem(`ezana_yt_playlist_${savedCourseId}`, values.youtubePlaylistId.trim());
@@ -714,9 +718,14 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
   const [thumbnailError, setThumbnailError] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
-    const savedKey = course ? localStorage.getItem(`ezana_yt_key_${course.id}`) ?? "" : "";
-    const savedChannel = course ? localStorage.getItem(`ezana_yt_channel_${course.id}`) ?? "" : "";
-    const savedPlaylist = course ? localStorage.getItem(`ezana_yt_playlist_${course.id}`) ?? "" : "";
+    const globalKey = localStorage.getItem("ezana_yt_key_global") ?? "";
+    const globalChannel = localStorage.getItem("ezana_yt_channel_global") ?? "";
+    const globalPlaylist = localStorage.getItem("ezana_yt_playlist_global") ?? "";
+
+    const savedKey = course ? (localStorage.getItem(`ezana_yt_key_${course.id}`) ?? globalKey) : globalKey;
+    const savedChannel = course ? (localStorage.getItem(`ezana_yt_channel_${course.id}`) ?? globalChannel) : globalChannel;
+    const savedPlaylist = course ? (localStorage.getItem(`ezana_yt_playlist_${course.id}`) ?? globalPlaylist) : globalPlaylist;
+
     setValues(course ? { title: course.title, slug: course.slug, short_description: course.short_description, description: course.description, image_url: course.image_url ?? "", coverFile: null, generatedCoverFile: null, level: course.level, duration_hours: String(course.duration_hours), status: course.status, instructor_id: course.instructor_id ?? "", youtubeApiKey: savedKey, youtubeChannelId: savedChannel, youtubePlaylistId: savedPlaylist } : blankCourse);
     setYoutubeVideos([]);
     setSelectedVideoIds([]);
