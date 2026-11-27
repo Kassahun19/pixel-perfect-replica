@@ -173,8 +173,8 @@ export function SidebarMenuNav({
   const syncScrollState = useCallback(() => {
     const el = navRef.current;
     if (!el) return;
-    const canUp = el.scrollTop > 4;
-    const canDown = el.scrollTop + el.clientHeight < el.scrollHeight - 4;
+    const canUp = el.scrollTop > 2;
+    const canDown = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
     setScrollState((prev) =>
       prev.canUp === canUp && prev.canDown === canDown ? prev : { canUp, canDown },
     );
@@ -209,18 +209,18 @@ export function SidebarMenuNav({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {scrollState.canUp && (
-        <button
-          type="button"
-          onClick={() => scrollByStep(-180)}
-          aria-label="Scroll sidebar menu up"
-          className="mb-1 flex w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-border/70 bg-secondary/60 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        >
-          <ChevronUp className="h-3.5 w-3.5" />
-          <span>Scroll up</span>
-        </button>
-      )}
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={() => scrollByStep(-180)}
+        disabled={!scrollState.canUp}
+        aria-label="Scroll sidebar menu up"
+        title="Scroll menu up"
+        className="flex w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-secondary/70 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ChevronUp className="h-3.5 w-3.5" />
+        <span>Scroll up</span>
+      </button>
 
       <nav
         ref={navRef}
@@ -234,17 +234,17 @@ export function SidebarMenuNav({
         {children}
       </nav>
 
-      {scrollState.canDown && (
-        <button
-          type="button"
-          onClick={() => scrollByStep(180)}
-          aria-label="Scroll sidebar menu down"
-          className="mt-1 flex w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-border/70 bg-secondary/60 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        >
-          <ChevronDown className="h-3.5 w-3.5" />
-          <span>Scroll down</span>
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => scrollByStep(180)}
+        disabled={!scrollState.canDown}
+        aria-label="Scroll sidebar menu down"
+        title="Scroll menu down"
+        className="flex w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-secondary/70 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ChevronDown className="h-3.5 w-3.5" />
+        <span>Scroll down</span>
+      </button>
     </div>
   );
 }

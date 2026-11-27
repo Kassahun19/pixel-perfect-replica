@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -6,7 +6,6 @@ import {
   Bell,
   ChevronDown,
   ChevronRight,
-  ChevronUp,
   LogOut,
   Menu,
   RefreshCw,
@@ -21,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ErrorBlock, LoadingBlock } from "@/components/dashboard/ui";
+import { ErrorBlock, LoadingBlock, SidebarMenuNav } from "@/components/dashboard/ui";
 import { PrintableSheetDialog } from "@/components/dashboard/owner/PrintableSheetDialog";
 import {
   ALL_PARENT_SUBMENU_ITEMS,
@@ -207,8 +206,8 @@ export function ParentDashboard({
       ? "Linked Child"
       : "No linked child";
 
-  const sidebarContent = (
-    <div className="flex h-full flex-col">
+  const renderSidebar = () => (
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <div className="mb-3 flex items-center gap-3 rounded-xl bg-deep p-3.5 text-deep-foreground">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold font-display text-sm font-bold text-deep">
           {profile ? initials(profile) : <Users className="h-5 w-5" />}
@@ -268,37 +267,7 @@ export function ParentDashboard({
         />
       </div>
 
-      <div className="flex items-center justify-between px-1 mb-2">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Menus</span>
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-6 w-6 rounded-md"
-            title="Scroll Up"
-            onClick={() => navRef.current?.scrollBy({ top: -160, behavior: "smooth" })}
-          >
-            <ChevronUp className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-6 w-6 rounded-md"
-            title="Scroll Down"
-            onClick={() => navRef.current?.scrollBy({ top: 160, behavior: "smooth" })}
-          >
-            <ChevronDown className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
-
-      <nav
-        ref={navRef}
-        aria-label="Parent dashboard navigation"
-        className="flex-1 space-y-1.5 overflow-y-auto pr-1 sidebar-scrollbar"
-      >
+      <SidebarMenuNav ariaLabel="Parent dashboard navigation">
         {visibleGroups.map((group) => {
           const GroupIcon = group.icon;
           const isSingle =
@@ -407,9 +376,9 @@ export function ParentDashboard({
             </div>
           );
         })}
-      </nav>
+      </SidebarMenuNav>
 
-      <div className="mt-3 border-t border-border px-2 pt-3 text-xs text-muted-foreground">
+      <div className="mt-3 shrink-0 border-t border-border px-2 pt-3 text-xs text-muted-foreground">
         <p className="truncate font-semibold text-foreground">
           {displayName(profile) || user?.email}
         </p>
@@ -422,16 +391,16 @@ export function ParentDashboard({
     <div className="grid gap-6 lg:grid-cols-[276px_minmax(0,1fr)] print:block">
       {/* Desktop Sticky Sidebar */}
       <aside className="hidden max-h-[calc(100vh-7.5rem)] self-start overflow-hidden rounded-2xl border border-border bg-card p-3 shadow-soft lg:sticky lg:top-24 lg:flex lg:flex-col print:hidden">
-        {sidebarContent}
+        {renderSidebar()}
       </aside>
 
       {/* Mobile Navigation Drawer */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-80 p-4">
+        <SheetContent side="left" className="flex w-80 flex-col p-4">
           <SheetHeader className="sr-only">
             <SheetTitle>Parent Dashboard Menu</SheetTitle>
           </SheetHeader>
-          {sidebarContent}
+          {renderSidebar()}
         </SheetContent>
       </Sheet>
 
