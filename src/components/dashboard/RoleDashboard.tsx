@@ -297,6 +297,11 @@ export function RoleDashboard() {
       setBusy(false); toast.error(result.error.message); return;
     }
     const savedCourseId = course?.id ?? ("data" in result ? result.data?.id : undefined);
+    if (savedCourseId) {
+      localStorage.setItem(`ezana_yt_key_${savedCourseId}`, values.youtubeApiKey.trim());
+      localStorage.setItem(`ezana_yt_channel_${savedCourseId}`, values.youtubeChannelId.trim());
+      localStorage.setItem(`ezana_yt_playlist_${savedCourseId}`, values.youtubePlaylistId.trim());
+    }
     if (youtubeVideos.length && savedCourseId) {
       const lessonStart = (lessonsByCourse.get(savedCourseId) ?? []).reduce((max, lesson) => Math.max(max, lesson.position), 0);
       const lessonRows = youtubeVideos.map((video, index) => ({
@@ -709,7 +714,10 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
   const [thumbnailError, setThumbnailError] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
-    setValues(course ? { title: course.title, slug: course.slug, short_description: course.short_description, description: course.description, image_url: course.image_url ?? "", coverFile: null, generatedCoverFile: null, level: course.level, duration_hours: String(course.duration_hours), status: course.status, instructor_id: course.instructor_id ?? "", youtubeApiKey: "", youtubeChannelId: "", youtubePlaylistId: "" } : blankCourse);
+    const savedKey = course ? localStorage.getItem(`ezana_yt_key_${course.id}`) ?? "" : "";
+    const savedChannel = course ? localStorage.getItem(`ezana_yt_channel_${course.id}`) ?? "" : "";
+    const savedPlaylist = course ? localStorage.getItem(`ezana_yt_playlist_${course.id}`) ?? "" : "";
+    setValues(course ? { title: course.title, slug: course.slug, short_description: course.short_description, description: course.description, image_url: course.image_url ?? "", coverFile: null, generatedCoverFile: null, level: course.level, duration_hours: String(course.duration_hours), status: course.status, instructor_id: course.instructor_id ?? "", youtubeApiKey: savedKey, youtubeChannelId: savedChannel, youtubePlaylistId: savedPlaylist } : blankCourse);
     setYoutubeVideos([]);
     setSelectedVideoIds([]);
     setAutoDurationHours(!course || course.duration_hours === 0);

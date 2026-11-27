@@ -149,6 +149,9 @@ export interface CourseExtensionMeta {
   maxCapacity: number | null;
   classSectionId: string | null;
   academicTermId: string | null;
+  youtubeApiKey?: string | null;
+  youtubeChannelId?: string | null;
+  youtubePlaylistId?: string | null;
 }
 
 export type TimetableSessionType = "lesson" | "exam" | "live_class";

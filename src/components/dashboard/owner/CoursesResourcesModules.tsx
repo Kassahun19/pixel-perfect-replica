@@ -154,6 +154,9 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
     setSelectedVideoIds([]);
     setGeneratedPreview(undefined);
     const meta = course ? workspace?.courseMeta[course.id] : undefined;
+    const savedKey = course ? localStorage.getItem(`ezana_yt_key_${course.id}`) ?? meta?.youtubeApiKey ?? "" : "";
+    const savedChannel = course ? localStorage.getItem(`ezana_yt_channel_${course.id}`) ?? meta?.youtubeChannelId ?? "" : "";
+    const savedPlaylist = course ? localStorage.getItem(`ezana_yt_playlist_${course.id}`) ?? meta?.youtubePlaylistId ?? "" : "";
     setForm({
       title: course?.title ?? "",
       slug: course?.slug ?? "",
@@ -171,9 +174,9 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
       maxCapacity: meta?.maxCapacity ? String(meta.maxCapacity) : "",
       coverFile: null,
       generatedCoverFile: null,
-      youtubeApiKey: "",
-      youtubeChannelId: "",
-      youtubePlaylistId: "",
+      youtubeApiKey: savedKey,
+      youtubeChannelId: savedChannel,
+      youtubePlaylistId: savedPlaylist,
     });
     setEditorOpen(true);
   }
@@ -406,6 +409,10 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
       const savedId = editing?.id ?? ("data" in res ? res.data?.id : undefined);
 
       if (savedId) {
+        localStorage.setItem(`ezana_yt_key_${savedId}`, form.youtubeApiKey.trim());
+        localStorage.setItem(`ezana_yt_channel_${savedId}`, form.youtubeChannelId.trim());
+        localStorage.setItem(`ezana_yt_playlist_${savedId}`, form.youtubePlaylistId.trim());
+
         await mutateWorkspace({
           type: "upsert_course_meta",
           payload: {
@@ -415,6 +422,9 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
             maxCapacity: form.maxCapacity ? Number(form.maxCapacity) : null,
             classSectionId: null,
             academicTermId: null,
+            youtubeApiKey: form.youtubeApiKey.trim() || null,
+            youtubeChannelId: form.youtubeChannelId.trim() || null,
+            youtubePlaylistId: form.youtubePlaylistId.trim() || null,
           },
         });
 
