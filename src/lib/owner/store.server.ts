@@ -19,9 +19,15 @@ import type {
   AcademicTerm,
   AcademicYear,
   AccountPreferences,
+  AssignmentSubmission,
   AttendanceRecord,
   CertificateTemplate,
   ClassSection,
+  CourseAssignment,
+  CourseCompletionRecord,
+  CourseDiscussionPost,
+  CourseDiscussionThread,
+  CourseMaterial,
   Department,
   EnrollmentMeta,
   EnrollmentRequest,
@@ -30,17 +36,20 @@ import type {
   FeePlan,
   GradeEntry,
   GradingScale,
+  InstructorPayout,
   InstructorRecordMeta,
   IntegrationConfig,
   InternalMessage,
   InvoiceRecord,
   IssuedCertificate,
   LearningResource,
+  LiveClassSession,
   OwnerWorkspaceState,
   ParentMessage,
   PaymentReminder,
   PermissionAction,
   PermissionModule,
+  QuestionBankItem,
   RolePermissionMatrix,
   StudentRecordMeta,
   SubjectRecord,
@@ -53,7 +62,7 @@ import type {
 const DATA_DIR = path.resolve(process.cwd(), ".data");
 const WORKSPACE_FILE = path.resolve(DATA_DIR, "owner-workspace.json");
 
-function createAuthedSupabase(url: string, key: string, token: string) {
+export function createAuthedSupabase(url: string, key: string, token: string) {
   const isOpaque = key.startsWith("sb_publishable_") || key.startsWith("sb_secret_");
   return createClient<Database>(url, key, {
     global: {
@@ -368,6 +377,15 @@ function createInitialWorkspaceState(): OwnerWorkspaceState {
     ],
     issuedCertificates: [],
     paymentReminders: [],
+    courseMaterials: [],
+    liveClasses: [],
+    assignments: [],
+    assignmentSubmissions: [],
+    questionBank: [],
+    discussionThreads: [],
+    discussionPosts: [],
+    instructorPayouts: [],
+    courseCompletions: [],
   };
 }
 
@@ -405,6 +423,15 @@ function ensureWorkspaceLoaded(): OwnerWorkspaceState {
           : fallback.certificateTemplates,
         issuedCertificates: parsed.issuedCertificates ?? fallback.issuedCertificates,
         paymentReminders: parsed.paymentReminders ?? fallback.paymentReminders,
+        courseMaterials: parsed.courseMaterials ?? fallback.courseMaterials,
+        liveClasses: parsed.liveClasses ?? fallback.liveClasses,
+        assignments: parsed.assignments ?? fallback.assignments,
+        assignmentSubmissions: parsed.assignmentSubmissions ?? fallback.assignmentSubmissions,
+        questionBank: parsed.questionBank ?? fallback.questionBank,
+        discussionThreads: parsed.discussionThreads ?? fallback.discussionThreads,
+        discussionPosts: parsed.discussionPosts ?? fallback.discussionPosts,
+        instructorPayouts: parsed.instructorPayouts ?? fallback.instructorPayouts,
+        courseCompletions: parsed.courseCompletions ?? fallback.courseCompletions,
       };
       // Ensure owner permissions remain unrestricted
       for (const mod of ALL_PERMISSION_MODULES) {
@@ -692,7 +719,39 @@ export type WorkspaceMutationPayload =
         parentId?: string | null;
         note?: string;
       };
-    };
+    }
+  | { type: "upsert_course_material"; payload: CourseMaterial }
+  | { type: "delete_course_material"; id: string }
+  | { type: "upsert_live_class"; payload: LiveClassSession }
+  | { type: "delete_live_class"; id: string }
+  | { type: "upsert_assignment"; payload: CourseAssignment }
+  | { type: "delete_assignment"; id: string }
+  | { type: "upsert_assignment_submission"; payload: AssignmentSubmission }
+  | {
+      type: "grade_assignment_submission";
+      payload: {
+        submissionId: string;
+        assignmentId: string;
+        courseId: string;
+        studentId: string;
+        score: number;
+        feedback: string;
+        status: "graded" | "returned";
+      };
+    }
+  | { type: "delete_assignment_submission"; id: string }
+  | { type: "upsert_question_bank_item"; payload: QuestionBankItem }
+  | { type: "delete_question_bank_item"; id: string }
+  | { type: "upsert_discussion_thread"; payload: CourseDiscussionThread }
+  | { type: "delete_discussion_thread"; id: string }
+  | {
+      type: "add_discussion_post";
+      payload: Omit<CourseDiscussionPost, "id" | "createdAt" | "moderatedHidden">;
+    }
+  | { type: "moderate_discussion_post"; id: string; hidden: boolean }
+  | { type: "upsert_instructor_payout"; payload: InstructorPayout }
+  | { type: "delete_instructor_payout"; id: string }
+  | { type: "upsert_course_completion"; payload: CourseCompletionRecord };
 
 export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload): {
   module: PermissionModule;
@@ -720,7 +779,12 @@ export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload)
     case "delete_subject":
       return { module: "subjects", action: "delete" };
     case "upsert_course_meta":
+    case "upsert_course_material":
+    case "upsert_live_class":
       return { module: "courses", action: "edit" };
+    case "delete_course_material":
+    case "delete_live_class":
+      return { module: "courses", action: "delete" };
     case "upsert_timetable":
       return { module: "timetables", action: "edit" };
     case "delete_timetable":
@@ -731,6 +795,8 @@ export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload)
       return { module: "attendance", action: "delete" };
     case "upsert_grading_scale":
     case "upsert_grade":
+    case "grade_assignment_submission":
+    case "upsert_course_completion":
       return { module: "grades", action: "edit" };
     case "delete_grade":
       return { module: "grades", action: "delete" };
@@ -749,9 +815,15 @@ export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload)
       return { module: "enrollments", action: "delete" };
     case "upsert_exam":
     case "upsert_exam_submission":
+    case "upsert_assignment":
+    case "upsert_assignment_submission":
+    case "upsert_question_bank_item":
       return { module: "exams", action: "edit" };
     case "delete_exam":
     case "delete_exam_submission":
+    case "delete_assignment":
+    case "delete_assignment_submission":
+    case "delete_question_bank_item":
       return { module: "exams", action: "delete" };
     case "upsert_certificate_template":
     case "update_certificate_status":
@@ -765,9 +837,11 @@ export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload)
     case "update_invoice_status":
     case "update_transaction_refund":
     case "send_payment_reminder":
+    case "upsert_instructor_payout":
       return { module: "finance", action: "edit" };
     case "delete_fee_plan":
     case "delete_invoice":
+    case "delete_instructor_payout":
       return { module: "finance", action: "delete" };
     case "send_parent_message":
     case "mark_parent_message_read":
@@ -776,7 +850,11 @@ export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload)
     case "create_notification":
     case "upsert_announcement_meta":
     case "upsert_support_meta":
+    case "upsert_discussion_thread":
+    case "add_discussion_post":
+    case "moderate_discussion_post":
       return { module: "communication", action: "edit" };
+    case "delete_discussion_thread":
     case "delete_notification":
       return { module: "communication", action: "delete" };
     case "mark_notification_read":
@@ -1426,6 +1504,176 @@ export function applyWorkspaceMutation(
       entityId = reminder.id;
       break;
     }
+    case "upsert_course_material":
+      next.courseMaterials = upsertById(next.courseMaterials, {
+        ...mutation.payload,
+        updatedAt: new Date().toISOString(),
+      });
+      entity = "course_material";
+      entityId = mutation.payload.id;
+      break;
+    case "delete_course_material":
+      next.courseMaterials = next.courseMaterials.filter((m) => m.id !== mutation.id);
+      entity = "course_material";
+      entityId = mutation.id;
+      break;
+    case "upsert_live_class":
+      next.liveClasses = upsertById(next.liveClasses, mutation.payload);
+      entity = "live_class";
+      entityId = mutation.payload.id;
+      break;
+    case "delete_live_class":
+      next.liveClasses = next.liveClasses.filter((lc) => lc.id !== mutation.id);
+      entity = "live_class";
+      entityId = mutation.id;
+      break;
+    case "upsert_assignment":
+      if (mutation.payload.maxScore <= 0) {
+        throw new Error("Assignment maximum score must be positive.");
+      }
+      next.assignments = upsertById(next.assignments, {
+        ...mutation.payload,
+        updatedAt: new Date().toISOString(),
+      });
+      entity = "assignment";
+      entityId = mutation.payload.id;
+      break;
+    case "delete_assignment":
+      next.assignments = next.assignments.filter((a) => a.id !== mutation.id);
+      next.assignmentSubmissions = next.assignmentSubmissions.filter(
+        (s) => s.assignmentId !== mutation.id,
+      );
+      entity = "assignment";
+      entityId = mutation.id;
+      break;
+    case "upsert_assignment_submission":
+      next.assignmentSubmissions = upsertById(next.assignmentSubmissions, mutation.payload);
+      entity = "assignment_submission";
+      entityId = mutation.payload.id;
+      break;
+    case "grade_assignment_submission": {
+      const assignment = next.assignments.find((a) => a.id === mutation.payload.assignmentId);
+      if (
+        assignment &&
+        (mutation.payload.score < 0 || mutation.payload.score > assignment.maxScore)
+      ) {
+        throw new Error(`Score must be between 0 and ${assignment.maxScore}.`);
+      }
+      const existing = next.assignmentSubmissions.find(
+        (s) => s.id === mutation.payload.submissionId,
+      );
+      const now = new Date().toISOString();
+      const updatedSub: AssignmentSubmission = existing
+        ? {
+            ...existing,
+            score: mutation.payload.score,
+            feedback: mutation.payload.feedback,
+            status: mutation.payload.status,
+            gradedBy: actorId,
+            gradedAt: now,
+            returnedAt:
+              mutation.payload.status === "returned" ? now : existing.returnedAt,
+          }
+        : {
+            id: mutation.payload.submissionId || crypto.randomUUID(),
+            assignmentId: mutation.payload.assignmentId,
+            courseId: mutation.payload.courseId,
+            studentId: mutation.payload.studentId,
+            submittedText: "",
+            attachmentUrl: "",
+            submittedAt: now,
+            status: mutation.payload.status,
+            score: mutation.payload.score,
+            feedback: mutation.payload.feedback,
+            gradedBy: actorId,
+            gradedAt: now,
+            returnedAt: mutation.payload.status === "returned" ? now : null,
+          };
+      next.assignmentSubmissions = upsertById(next.assignmentSubmissions, updatedSub);
+      entity = "assignment_submission";
+      entityId = updatedSub.id;
+      auditAction = "assignment_graded";
+      break;
+    }
+    case "delete_assignment_submission":
+      next.assignmentSubmissions = next.assignmentSubmissions.filter((s) => s.id !== mutation.id);
+      entity = "assignment_submission";
+      entityId = mutation.id;
+      break;
+    case "upsert_question_bank_item":
+      if (mutation.payload.points <= 0) {
+        throw new Error("Question points must be positive.");
+      }
+      next.questionBank = upsertById(next.questionBank, {
+        ...mutation.payload,
+        updatedAt: new Date().toISOString(),
+      });
+      entity = "question_bank";
+      entityId = mutation.payload.id;
+      break;
+    case "delete_question_bank_item":
+      next.questionBank = next.questionBank.filter((q) => q.id !== mutation.id);
+      entity = "question_bank";
+      entityId = mutation.id;
+      break;
+    case "upsert_discussion_thread":
+      next.discussionThreads = upsertById(next.discussionThreads, {
+        ...mutation.payload,
+        updatedAt: new Date().toISOString(),
+      });
+      entity = "discussion_thread";
+      entityId = mutation.payload.id;
+      break;
+    case "delete_discussion_thread":
+      next.discussionThreads = next.discussionThreads.filter((t) => t.id !== mutation.id);
+      next.discussionPosts = next.discussionPosts.filter((p) => p.threadId !== mutation.id);
+      entity = "discussion_thread";
+      entityId = mutation.id;
+      break;
+    case "add_discussion_post": {
+      const thread = next.discussionThreads.find((t) => t.id === mutation.payload.threadId);
+      if (thread?.locked) {
+        throw new Error("This discussion thread is locked.");
+      }
+      const post: CourseDiscussionPost = {
+        ...mutation.payload,
+        id: crypto.randomUUID(),
+        moderatedHidden: false,
+        createdAt: new Date().toISOString(),
+      };
+      next.discussionPosts = [...next.discussionPosts, post];
+      entity = "discussion_post";
+      entityId = post.id;
+      break;
+    }
+    case "moderate_discussion_post":
+      next.discussionPosts = next.discussionPosts.map((p) =>
+        p.id === mutation.id ? { ...p, moderatedHidden: mutation.hidden } : p,
+      );
+      entity = "discussion_post";
+      entityId = mutation.id;
+      break;
+    case "upsert_instructor_payout":
+      if (mutation.payload.amount < 0) {
+        throw new Error("Payout amount cannot be negative.");
+      }
+      next.instructorPayouts = upsertById(next.instructorPayouts, mutation.payload);
+      entity = "instructor_payout";
+      entityId = mutation.payload.id;
+      break;
+    case "delete_instructor_payout":
+      next.instructorPayouts = next.instructorPayouts.filter((p) => p.id !== mutation.id);
+      entity = "instructor_payout";
+      entityId = mutation.id;
+      break;
+    case "upsert_course_completion":
+      next.courseCompletions = upsertById(next.courseCompletions, {
+        ...mutation.payload,
+        updatedAt: new Date().toISOString(),
+      });
+      entity = "course_completion";
+      entityId = mutation.payload.id;
+      break;
   }
 
   persistWorkspaceState(next);

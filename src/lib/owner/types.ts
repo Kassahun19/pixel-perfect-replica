@@ -335,6 +335,8 @@ export interface SystemNotification {
   category: "system" | "academic" | "finance" | "communication";
   targetRole: AppRole | "all";
   targetClassId: string | null;
+  targetCourseId?: string | null;
+  targetUserId?: string | null;
   readBy: string[];
   createdAt: string;
 }
@@ -429,7 +431,7 @@ export interface EnrollmentMeta {
 export interface ExamQuestion {
   id: string;
   prompt: string;
-  questionType: "multiple_choice" | "short_answer" | "practical";
+  questionType: "multiple_choice" | "true_false" | "short_answer" | "practical";
   options: string[];
   correctAnswer: string;
   points: number;
@@ -440,8 +442,11 @@ export interface ExamAssessment {
   title: string;
   courseId: string;
   termId: string | null;
+  classSectionId?: string | null;
+  instructorId?: string | null;
   examType: "quiz" | "midterm" | "final" | "practical" | "assignment";
   scheduledDate: string;
+  dueDate?: string | null;
   startTime: string;
   durationMinutes: number;
   maxScore: number;
@@ -500,6 +505,140 @@ export interface PaymentReminder {
   note: string;
 }
 
+export interface CourseMaterial {
+  id: string;
+  courseId: string;
+  lessonId: string | null;
+  topic: string;
+  title: string;
+  type: ResourceType;
+  url: string;
+  storagePath: string | null;
+  fileSizeLabel: string;
+  description: string;
+  visibleToEnrolled: boolean;
+  uploadedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LiveClassSession {
+  id: string;
+  courseId: string;
+  classSectionId: string | null;
+  instructorId: string;
+  title: string;
+  scheduledDate: string;
+  startTime: string;
+  endTime: string;
+  meetingUrl: string;
+  status: "scheduled" | "live" | "ended" | "cancelled";
+  participantIds: string[];
+  attachedMaterialIds: string[];
+  notes: string;
+  createdAt: string;
+}
+
+export interface CourseAssignment {
+  id: string;
+  courseId: string;
+  classSectionId: string | null;
+  instructorId: string;
+  title: string;
+  description: string;
+  instructions: string;
+  dueDate: string;
+  maxScore: number;
+  attachmentUrl: string;
+  attachmentName: string;
+  status: "draft" | "published" | "closed" | "archived";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AssignmentSubmission {
+  id: string;
+  assignmentId: string;
+  courseId: string;
+  studentId: string;
+  submittedText: string;
+  attachmentUrl: string;
+  submittedAt: string | null;
+  status: "pending" | "submitted" | "late" | "graded" | "returned";
+  score: number | null;
+  feedback: string;
+  gradedBy: string | null;
+  gradedAt: string | null;
+  returnedAt: string | null;
+}
+
+export interface QuestionBankItem {
+  id: string;
+  courseId: string;
+  subjectId: string | null;
+  instructorId: string;
+  topic: string;
+  prompt: string;
+  questionType: "multiple_choice" | "true_false" | "short_answer" | "practical";
+  options: string[];
+  correctAnswer: string;
+  points: number;
+  difficulty: "easy" | "medium" | "hard";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CourseDiscussionThread {
+  id: string;
+  courseId: string;
+  authorId: string;
+  authorRole: AppRole;
+  title: string;
+  body: string;
+  pinned: boolean;
+  locked: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CourseDiscussionPost {
+  id: string;
+  threadId: string;
+  courseId: string;
+  authorId: string;
+  authorRole: AppRole;
+  body: string;
+  moderatedHidden: boolean;
+  createdAt: string;
+}
+
+export interface InstructorPayout {
+  id: string;
+  instructorId: string;
+  periodLabel: string;
+  courseId: string | null;
+  amount: number;
+  teachingHours: number;
+  ratePerHour: number;
+  status: "pending" | "completed" | "failed";
+  referenceCode: string;
+  paidAt: string | null;
+  notes: string;
+  createdAt: string;
+}
+
+export interface CourseCompletionRecord {
+  id: string;
+  studentId: string;
+  courseId: string;
+  completionPercent: number;
+  status: "in_progress" | "completed" | "confirmed";
+  confirmedBy: string | null;
+  confirmedAt: string | null;
+  notes: string;
+  updatedAt: string;
+}
+
 export interface OwnerWorkspaceState {
   academicYears: AcademicYear[];
   terms: AcademicTerm[];
@@ -535,6 +674,15 @@ export interface OwnerWorkspaceState {
   certificateTemplates: CertificateTemplate[];
   issuedCertificates: IssuedCertificate[];
   paymentReminders: PaymentReminder[];
+  courseMaterials: CourseMaterial[];
+  liveClasses: LiveClassSession[];
+  assignments: CourseAssignment[];
+  assignmentSubmissions: AssignmentSubmission[];
+  questionBank: QuestionBankItem[];
+  discussionThreads: CourseDiscussionThread[];
+  discussionPosts: CourseDiscussionPost[];
+  instructorPayouts: InstructorPayout[];
+  courseCompletions: CourseCompletionRecord[];
 }
 
 export type ProfileRow = Tables<"profiles">;

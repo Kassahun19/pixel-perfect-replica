@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmButton, EmptyState, ErrorBlock, LoadingBlock, PageHeader, Panel, StatCard } from "@/components/dashboard/ui";
 import { OwnerDashboard } from "./owner/OwnerDashboard";
+import { InstructorDashboard } from "./instructor/InstructorDashboard";
 
 type Profile = Tables<"profiles">;
 type UserRole = Tables<"user_roles">;
@@ -199,15 +200,8 @@ function slugify(value: string) {
 }
 
 export function RoleDashboard() {
-  const { user, profile, roles, primaryRole } = useAuth();
+  const { roles, primaryRole } = useAuth();
   const [pickedRole, setPickedRole] = useState<AppRole | null>(null);
-  const [section, setSection] = useState<Section>("overview");
-  const [selectedChild, setSelectedChild] = useState("");
-  const [search, setSearch] = useState("");
-  const [courseDialog, setCourseDialog] = useState(false);
-  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-  const [busy, setBusy] = useState(false);
-  const qc = useQueryClient();
   const role = (pickedRole && roles.includes(pickedRole) ? pickedRole : primaryRole) ?? "student";
   const staff = role === "owner" || role === "admin";
 
@@ -216,13 +210,48 @@ export function RoleDashboard() {
       <OwnerDashboard
         role={role}
         roles={roles}
-        onSwitchRole={(nextRole) => {
-          setPickedRole(nextRole);
-          setSection("overview");
-        }}
+        onSwitchRole={(nextRole) => setPickedRole(nextRole)}
       />
     );
   }
+
+  if (role === "instructor") {
+    return (
+      <InstructorDashboard
+        role={role}
+        roles={roles}
+        onSwitchRole={(nextRole) => setPickedRole(nextRole)}
+      />
+    );
+  }
+
+  return (
+    <LegacyRoleDashboard
+      role={role}
+      roles={roles}
+      onSwitchRole={(nextRole) => setPickedRole(nextRole)}
+    />
+  );
+}
+
+function LegacyRoleDashboard({
+  role,
+  roles,
+  onSwitchRole,
+}: {
+  role: AppRole;
+  roles: AppRole[];
+  onSwitchRole: (nextRole: AppRole) => void;
+}) {
+  const { user, profile } = useAuth();
+  const [section, setSection] = useState<Section>("overview");
+  const [selectedChild, setSelectedChild] = useState("");
+  const [search, setSearch] = useState("");
+  const [courseDialog, setCourseDialog] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [busy, setBusy] = useState(false);
+  const qc = useQueryClient();
+  const staff = false;
 
   const sections = sectionsFor(role);
   const currentSection = sections.some((s) => s.id === section) || section === "account" ? section : "overview";
@@ -452,7 +481,7 @@ export function RoleDashboard() {
         {roles.length > 1 && (
           <label className="mb-3 block px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             View workspace
-            <select aria-label="Choose dashboard role" value={role} onChange={(e) => { setPickedRole(e.target.value as AppRole); setSection("overview"); }} className="mt-1.5 h-9 w-full rounded-lg border border-border bg-background px-2 text-sm font-medium normal-case tracking-normal text-foreground">
+            <select aria-label="Choose dashboard role" value={role} onChange={(e) => { onSwitchRole(e.target.value as AppRole); setSection("overview"); }} className="mt-1.5 h-9 w-full rounded-lg border border-border bg-background px-2 text-sm font-medium normal-case tracking-normal text-foreground">
               {roles.map((r) => <option key={r} value={r}>{ROLE_NAME[r]}</option>)}
             </select>
           </label>

@@ -1,6 +1,8 @@
 import type { AppRole } from "@/lib/auth";
 import type {
+  AssignmentSubmission,
   AttendanceRecord,
+  CourseAssignment,
   CourseRow,
   ExamAssessment,
   ExamSubmission,
@@ -9,6 +11,7 @@ import type {
   GradeEntry,
   GradingBand,
   GradingScale,
+  InstructorPayout,
   ModulePermissions,
   PermissionAction,
   PermissionModule,
@@ -124,7 +127,7 @@ export function createDefaultRolePermissions(): RolePermissionMatrix {
     communication: {
       view: true,
       create: true,
-      edit: false,
+      edit: true,
       delete: false,
       export: false,
       approve: false,
@@ -443,6 +446,64 @@ export function computeExamStats(exam: ExamAssessment, submissions: ExamSubmissi
     passedCount: passed,
     averageScore,
     passRate,
+  };
+}
+
+export function computeAssignmentStats(
+  assignment: CourseAssignment,
+  submissions: AssignmentSubmission[],
+  enrolledCount: number,
+) {
+  const matching = submissions.filter((s) => s.assignmentId === assignment.id);
+  const submitted = matching.filter((s) => s.status !== "pending").length;
+  const graded = matching.filter((s) => s.status === "graded" || s.status === "returned");
+  const pendingEval = matching.filter(
+    (s) => s.status === "submitted" || s.status === "late",
+  ).length;
+  const averageScore =
+    graded.length > 0
+      ? Math.round(
+          (graded.reduce((sum, s) => sum + Number(s.score ?? 0), 0) / graded.length) * 10,
+        ) / 10
+      : 0;
+  return {
+    submittedCount: submitted,
+    pendingEvaluationCount: pendingEval,
+    gradedCount: graded.length,
+    missingCount: Math.max(0, enrolledCount - submitted),
+    averageScore,
+  };
+}
+
+export function computeInstructorEarningsSummary(
+  payouts: InstructorPayout[],
+  hourlyRate = 0,
+  totalTeachingHours = 0,
+) {
+  let totalPaid = 0;
+  let totalPending = 0;
+  let totalFailed = 0;
+  let loggedHours = 0;
+
+  for (const p of payouts) {
+    loggedHours += Number(p.teachingHours || 0);
+    if (p.status === "completed") totalPaid += Number(p.amount || 0);
+    else if (p.status === "pending") totalPending += Number(p.amount || 0);
+    else if (p.status === "failed") totalFailed += Number(p.amount || 0);
+  }
+
+  const estimatedActiveEarnings =
+    hourlyRate > 0 && totalTeachingHours > loggedHours
+      ? Math.round((totalTeachingHours - loggedHours) * hourlyRate)
+      : 0;
+
+  return {
+    totalPaid,
+    totalPending,
+    totalFailed,
+    totalEarnings: totalPaid + totalPending,
+    estimatedActiveEarnings,
+    loggedHours,
   };
 }
 
