@@ -3,6 +3,7 @@ import {
   decodeHtmlEntities,
   durationSecondsToMinutes,
   fetchYouTubeChannelVideos,
+  fetchYouTubePlaylistVideos,
   formatVideoDuration,
   getYouTubeId,
   parseYouTubeIsoDuration,
@@ -156,4 +157,56 @@ describe("YouTube duration parsing, branding replacement, and channel fetching",
       },
     ]);
   });
+
+  it("fetches playlist videos (including unlisted videos) with dynamic durations and branding", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/youtube/v3/playlistItems")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                contentDetails: { videoId: "unlistedV01" },
+                snippet: { title: "Unlisted Lecture | Adnakot Tube", description: "Unlisted video" },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/youtube/v3/videos")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "unlistedV01",
+                snippet: {
+                  title: "Unlisted Lecture | Adnakot Tube",
+                  description: "Unlisted video",
+                  channelTitle: "Adnakot Tube",
+                },
+                contentDetails: { duration: "PT15M" },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("Not found", { status: 404 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const videos = await fetchYouTubePlaylistVideos("fake-key", "PL_unlisted_123");
+    expect(videos).toEqual([
+      {
+        id: "unlistedV01",
+        title: "Unlisted Lecture | Ezana Academy",
+        description: "Unlisted video",
+        durationSeconds: 900,
+        durationMinutes: 15,
+      },
+    ]);
+  });
 });
+
