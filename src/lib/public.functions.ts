@@ -136,8 +136,27 @@ export const getAcademyStats = createServerFn({ method: "GET" }).handler(async (
   };
 });
 
-export const getAcademySettings = createServerFn({ method: "GET" }).handler(async () => {
-  const sb = publicClient();
-  const { data } = await sb.from("academy_settings").select("*").eq("id", 1).maybeSingle();
-  return data;
-});
+export type PublicAcademyProfile = {
+  name: string;
+  tagline: string;
+  description: string;
+  email: string;
+  address: string;
+  website: string | null;
+  facebook: string | null;
+  telegram: string | null;
+  youtube: string | null;
+  linkedin: string | null;
+};
+
+export const getAcademySettings = createServerFn({ method: "GET" }).handler(
+  async (): Promise<PublicAcademyProfile | null> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin
+      .from("academy_settings")
+      .select("name,tagline,description,email,address,website,facebook,telegram,youtube,linkedin")
+      .eq("id", 1)
+      .maybeSingle();
+    return data ?? null;
+  },
+);

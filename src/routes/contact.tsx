@@ -59,7 +59,7 @@ function Contact() {
 
   const info = [
     { icon: MapPin, label: "Visit us", value: s?.address || "Bole Road, Addis Ababa, Ethiopia" },
-    { icon: Phone, label: "Call us", value: s?.phone || "+251 911 000 218" },
+    { icon: Phone, label: "Call us", value: "+251 911 000 218" },
     { icon: Mail, label: "Email us", value: s?.email || "hello@ezanaacademy.et" },
   ];
 

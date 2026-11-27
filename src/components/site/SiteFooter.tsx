@@ -31,7 +31,7 @@ export function SiteFooter() {
           <h4 className="font-display text-lg text-gold">Reach us</h4>
           <ul className="mt-4 space-y-3 text-sm text-deep-muted">
             <li className="flex gap-2"><MapPin className="h-4 w-4 shrink-0 text-gold" />{s?.address || "Addis Ababa, Ethiopia"}</li>
-            <li className="flex gap-2"><Phone className="h-4 w-4 shrink-0 text-gold" />{s?.phone || "+251 911 000 218"}</li>
+            <li className="flex gap-2"><Phone className="h-4 w-4 shrink-0 text-gold" />+251 911 000 218</li>
             <li className="flex gap-2"><Mail className="h-4 w-4 shrink-0 text-gold" />{s?.email || "hello@ezanaacademy.et"}</li>
           </ul>
         </div>
