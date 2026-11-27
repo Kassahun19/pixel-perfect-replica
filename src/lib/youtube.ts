@@ -347,3 +347,85 @@ export async function fetchYouTubeChannelVideos(
   }
   return videos;
 }
+
+/**
+ * Fetches videos for a YouTube Playlist ID along with each video's exact duration
+ * from YouTube Data API v3 (`contentDetails.duration`), replacing branding
+ * in titles and descriptions with "Ezana Academy".
+ */
+export async function fetchYouTubePlaylistVideos(
+  apiKey: string,
+  playlistId: string,
+): Promise<YouTubeChannelVideo[]> {
+  const key = apiKey.trim();
+  const playlist = playlistId.trim();
+
+  let channelTitle = "Ezana Academy";
+  const fallbackMeta = new Map<string, { title: string; description: string }>();
+  const orderedIds: string[] = [];
+
+  let pageToken: string | undefined;
+  for (let page = 0; page < 4; page += 1) {
+    const playlistParams = new URLSearchParams({
+      part: "contentDetails,snippet",
+      playlistId: playlist,
+      maxResults: "50",
+      key,
+    });
+    if (pageToken) playlistParams.set("pageToken", pageToken);
+
+    const playlistRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/playlistItems?${playlistParams}`,
+    );
+    const playlistPayload = (await playlistRes.json()) as YouTubePlaylistItemsResponse;
+    if (!playlistRes.ok) {
+      throw new Error(
+        playlistPayload.error?.message ?? "YouTube could not load this playlist",
+      );
+    }
+
+    for (const item of playlistPayload.items ?? []) {
+      const videoId = item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId;
+      if (!videoId) continue;
+      if (item.snippet?.channelTitle) {
+        channelTitle = item.snippet.channelTitle;
+      }
+      const resolvedChannel = item.snippet?.channelTitle ?? channelTitle;
+      orderedIds.push(videoId);
+      fallbackMeta.set(videoId, {
+        title: replaceChannelBranding(
+          item.snippet?.title ?? "Ezana Academy lesson",
+          resolvedChannel,
+        ),
+        description: replaceChannelBranding(item.snippet?.description ?? "", resolvedChannel),
+      });
+    }
+
+    if (!playlistPayload.nextPageToken) break;
+    pageToken = playlistPayload.nextPageToken;
+  }
+
+  if (!orderedIds.length) return [];
+
+  const detailsById = await fetchYouTubeVideoDetails(key, orderedIds, channelTitle);
+  const videos: YouTubeChannelVideo[] = [];
+  for (const id of orderedIds) {
+    const detail = detailsById.get(id);
+    if (detail) {
+      videos.push(detail);
+    } else {
+      const meta = fallbackMeta.get(id);
+      if (meta) {
+        videos.push({
+          id,
+          title: meta.title,
+          description: meta.description,
+          durationSeconds: 0,
+          durationMinutes: 0,
+        });
+      }
+    }
+  }
+  return videos;
+}
+

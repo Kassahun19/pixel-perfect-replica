@@ -29,6 +29,7 @@ import { downloadExcelXls, logAudit } from "@/lib/export";
 import { dataUrlToFile, streamImage } from "@/lib/stream-image";
 import {
   fetchYouTubeChannelVideos,
+  fetchYouTubePlaylistVideos,
   fetchYouTubeVideoDetails,
   formatVideoDuration,
   getYouTubeId,
@@ -121,6 +122,7 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
     generatedCoverFile: null as File | null,
     youtubeApiKey: "",
     youtubeChannelId: "",
+    youtubePlaylistId: "",
   });
   const [generatedPreview, setGeneratedPreview] = useState<string | undefined>();
   const [generatingThumb, setGeneratingThumb] = useState(false);
@@ -171,6 +173,7 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
       generatedCoverFile: null,
       youtubeApiKey: "",
       youtubeChannelId: "",
+      youtubePlaylistId: "",
     });
     setEditorOpen(true);
   }
@@ -207,13 +210,15 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
   }
 
   async function loadYoutube() {
-    if (!form.youtubeApiKey.trim() || !form.youtubeChannelId.trim()) {
-      toast.error("Enter YouTube API key and Channel ID.");
+    if (!form.youtubeApiKey.trim() || (!form.youtubeChannelId.trim() && !form.youtubePlaylistId.trim())) {
+      toast.error("Enter YouTube API key and either Channel ID or Playlist ID.");
       return;
     }
     setLoadingYt(true);
     try {
-      const vids = await fetchYouTubeChannelVideos(form.youtubeApiKey, form.youtubeChannelId);
+      const vids = form.youtubePlaylistId.trim()
+        ? await fetchYouTubePlaylistVideos(form.youtubeApiKey, form.youtubePlaylistId)
+        : await fetchYouTubeChannelVideos(form.youtubeApiKey, form.youtubeChannelId);
       setYoutubeVideos(vids);
       setSelectedVideoIds(vids.map((v) => v.id));
       toast.success(`Loaded ${vids.length} videos with Ezana Academy branding.`);
@@ -720,7 +725,7 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
               <p className="text-sm font-semibold">
                 Import / Sync YouTube Lessons (Ezana Academy Branding)
               </p>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-3">
                 <Input
                   type="password"
                   placeholder="YouTube API Key"
@@ -731,6 +736,11 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
                   placeholder="Channel ID (UC…)"
                   value={form.youtubeChannelId}
                   onChange={(e) => setForm((f) => ({ ...f, youtubeChannelId: e.target.value }))}
+                />
+                <Input
+                  placeholder="Playlist ID (PL… optional)"
+                  value={form.youtubePlaylistId}
+                  onChange={(e) => setForm((f) => ({ ...f, youtubePlaylistId: e.target.value }))}
                 />
               </div>
               <div className="flex flex-wrap gap-2">

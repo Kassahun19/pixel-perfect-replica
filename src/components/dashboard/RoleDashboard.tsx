@@ -16,6 +16,7 @@ import { courseCoverUrl, courseImageUrl, fallbackCourseToken } from "@/lib/cours
 import { dataUrlToFile, streamImage } from "@/lib/stream-image";
 import {
   fetchYouTubeChannelVideos,
+  fetchYouTubePlaylistVideos,
   fetchYouTubeVideoDetails,
   formatVideoDuration,
   getYouTubeId,
@@ -687,7 +688,7 @@ function CoursesSection({ role, data, userId, search, setSearch, onAdd, onEdit, 
 }
 
 type YoutubeVideo = YouTubeChannelVideo;
-type CourseFormValues = { title: string; slug: string; short_description: string; description: string; image_url: string; coverFile: File | null; generatedCoverFile: File | null; level: string; duration_hours: string; status: Course["status"]; instructor_id: string; youtubeApiKey: string; youtubeChannelId: string };
+type CourseFormValues = { title: string; slug: string; short_description: string; description: string; image_url: string; coverFile: File | null; generatedCoverFile: File | null; level: string; duration_hours: string; status: Course["status"]; instructor_id: string; youtubeApiKey: string; youtubeChannelId: string; youtubePlaylistId: string };
 
 function CourseEditor({ open, course, existingLessons, role, userId, instructors, busy, onOpenChange, onSave, onSynced }: {
   open: boolean; course: Course | null; existingLessons: Lesson[]; role: AppRole; userId: string; instructors: Profile[]; busy: boolean;
@@ -708,7 +709,7 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
   const [thumbnailError, setThumbnailError] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
-    setValues(course ? { title: course.title, slug: course.slug, short_description: course.short_description, description: course.description, image_url: course.image_url ?? "", coverFile: null, generatedCoverFile: null, level: course.level, duration_hours: String(course.duration_hours), status: course.status, instructor_id: course.instructor_id ?? "", youtubeApiKey: "", youtubeChannelId: "" } : blankCourse);
+    setValues(course ? { title: course.title, slug: course.slug, short_description: course.short_description, description: course.description, image_url: course.image_url ?? "", coverFile: null, generatedCoverFile: null, level: course.level, duration_hours: String(course.duration_hours), status: course.status, instructor_id: course.instructor_id ?? "", youtubeApiKey: "", youtubeChannelId: "", youtubePlaylistId: "" } : blankCourse);
     setYoutubeVideos([]);
     setSelectedVideoIds([]);
     setAutoDurationHours(!course || course.duration_hours === 0);
@@ -789,10 +790,12 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
     await onSave(submitValues, course ?? undefined, youtubeVideos.filter((video) => selectedVideoIds.includes(video.id)));
   }
   async function loadYoutubeVideos() {
-    if (!values.youtubeApiKey.trim() || !values.youtubeChannelId.trim()) { toast.error("Enter a YouTube API key and Channel ID"); return; }
+    if (!values.youtubeApiKey.trim() || (!values.youtubeChannelId.trim() && !values.youtubePlaylistId.trim())) { toast.error("Enter a YouTube API key and either Channel ID or Playlist ID"); return; }
     setLoadingYoutube(true);
     try {
-      const videos = await fetchYouTubeChannelVideos(values.youtubeApiKey, values.youtubeChannelId);
+      const videos = values.youtubePlaylistId.trim()
+        ? await fetchYouTubePlaylistVideos(values.youtubeApiKey, values.youtubePlaylistId)
+        : await fetchYouTubeChannelVideos(values.youtubeApiKey, values.youtubeChannelId);
       setYoutubeVideos(videos);
       const nextSelected = videos.map((video) => video.id);
       setSelectedVideoIds(nextSelected);
@@ -996,9 +999,10 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
       {role === "instructor" && <p className="text-xs text-muted-foreground sm:col-span-2">This course will be assigned to your instructor account ({userId.slice(0, 8)}…).</p>}
       <section className="space-y-3 rounded-xl border border-border bg-secondary/30 p-4 sm:col-span-2">
         <div><h3 className="font-semibold">Import lessons from a YouTube channel</h3><p className="text-xs text-muted-foreground">The API key is used only for this request and is not saved. Exact video lengths are fetched dynamically from YouTube.</p></div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <label className="space-y-1.5 text-sm font-medium">YouTube API key<Input type="password" autoComplete="off" value={values.youtubeApiKey} onChange={(e) => set("youtubeApiKey", e.target.value)} /></label>
           <label className="space-y-1.5 text-sm font-medium">YouTube Channel ID<Input value={values.youtubeChannelId} onChange={(e) => set("youtubeChannelId", e.target.value)} placeholder="UC…" /></label>
+          <label className="space-y-1.5 text-sm font-medium">YouTube Playlist ID<Input value={values.youtubePlaylistId} onChange={(e) => set("youtubePlaylistId", e.target.value)} placeholder="PL…" /></label>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={loadingYoutube || syncingDurations} onClick={() => void loadYoutubeVideos()}>{loadingYoutube ? <Loader2 className="animate-spin" /> : <PlayCircle />} Load channel videos</Button>
@@ -1055,7 +1059,7 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
   </DialogContent></Dialog>;
 }
 
-const blankCourse: CourseFormValues = { title: "", slug: "", short_description: "", description: "", image_url: "", coverFile: null, generatedCoverFile: null, level: "Beginner", duration_hours: "0", status: "draft", instructor_id: "", youtubeApiKey: "", youtubeChannelId: "" };
+const blankCourse: CourseFormValues = { title: "", slug: "", short_description: "", description: "", image_url: "", coverFile: null, generatedCoverFile: null, level: "Beginner", duration_hours: "0", status: "draft", instructor_id: "", youtubeApiKey: "", youtubeChannelId: "", youtubePlaylistId: "" };
 
 function LearnersSection({ data, coursesById, search, setSearch }: { data: DashboardData; coursesById: Map<string, Course>; search: string; setSearch: (s: string) => void }) {
   const learnerIds = [...new Set(data.enrollments.map((e) => e.user_id))];
