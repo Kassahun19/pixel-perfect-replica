@@ -23,6 +23,7 @@ import type {
   AttendanceDispute,
   AttendanceRecord,
   CertificateTemplate,
+  ChildLinkRequest,
   ClassSection,
   CourseAssignment,
   CourseCompletionRecord,
@@ -390,6 +391,7 @@ function createInitialWorkspaceState(): OwnerWorkspaceState {
     instructorPayouts: [],
     courseCompletions: [],
     profileCorrectionRequests: [],
+    childLinkRequests: [],
   };
 }
 
@@ -422,6 +424,15 @@ function ensureWorkspaceLoaded(): OwnerWorkspaceState {
       ) {
         mergedRolePerms.student = fallback.rolePermissions.student;
       }
+      const savedParent = parsed.rolePermissions?.parent;
+      if (
+        savedParent &&
+        !savedParent.courses?.view &&
+        !savedParent.timetables?.view &&
+        !savedParent.certificates?.view
+      ) {
+        mergedRolePerms.parent = fallback.rolePermissions.parent;
+      }
       cachedState = {
         ...fallback,
         ...parsed,
@@ -449,6 +460,7 @@ function ensureWorkspaceLoaded(): OwnerWorkspaceState {
         attendanceDisputes: parsed.attendanceDisputes ?? fallback.attendanceDisputes,
         profileCorrectionRequests:
           parsed.profileCorrectionRequests ?? fallback.profileCorrectionRequests,
+        childLinkRequests: parsed.childLinkRequests ?? fallback.childLinkRequests,
       };
       // Ensure owner permissions remain unrestricted
       for (const mod of ALL_PERMISSION_MODULES) {
@@ -776,6 +788,15 @@ export type WorkspaceMutationPayload =
   | {
       type: "request_profile_correction";
       payload: Omit<ProfileCorrectionRequest, "id" | "status" | "createdAt">;
+    }
+  | {
+      type: "request_child_link";
+      payload: Omit<ChildLinkRequest, "id" | "status" | "reviewedBy" | "reviewedAt" | "createdAt">;
+    }
+  | {
+      type: "review_child_link_request";
+      id: string;
+      status: "approved" | "rejected";
     };
 
 export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload): {
@@ -885,7 +906,10 @@ export function resolvePermissionForMutation(mutation: WorkspaceMutationPayload)
     case "mark_notification_read":
     case "update_account_prefs":
     case "request_profile_correction":
+    case "request_child_link":
       return { module: "overview", action: "view" };
+    case "review_child_link_request":
+      return { module: "parents", action: "approve" };
     case "report_attendance_discrepancy":
       return { module: "attendance", action: "view" };
     case "update_role_permissions":
@@ -1739,7 +1763,10 @@ export function applyWorkspaceMutation(
       next.notifications = [
         {
           id: crypto.randomUUID(),
-          title: "Student Profile Correction Request",
+          title:
+            req.targetType === "parent"
+              ? "Parent Profile Correction Request"
+              : "Student Profile Correction Request",
           message: `Requested change to ${req.field}: "${req.requestedValue}" (${req.reason})`,
           category: "system",
           targetRole: "admin",
@@ -1751,6 +1778,48 @@ export function applyWorkspaceMutation(
       ];
       entity = "profile_correction";
       entityId = req.id;
+      break;
+    }
+    case "request_child_link": {
+      const req: ChildLinkRequest = {
+        ...mutation.payload,
+        id: crypto.randomUUID(),
+        status: "pending",
+        reviewedBy: null,
+        reviewedAt: null,
+        createdAt: new Date().toISOString(),
+      };
+      next.childLinkRequests = [req, ...next.childLinkRequests];
+      next.notifications = [
+        {
+          id: crypto.randomUUID(),
+          title:
+            req.requestType === "correction"
+              ? "Parent–Child Link Correction Request"
+              : "New Child Link Request",
+          message: `${req.studentName || req.studentIdentifier} (${req.relationship}) — ${req.notes || "Pending verification"}`,
+          category: "system",
+          targetRole: "admin",
+          targetClassId: null,
+          readBy: [],
+          createdAt: req.createdAt,
+        },
+        ...next.notifications,
+      ];
+      entity = "child_link_request";
+      entityId = req.id;
+      break;
+    }
+    case "review_child_link_request": {
+      const now = new Date().toISOString();
+      next.childLinkRequests = next.childLinkRequests.map((r) =>
+        r.id === mutation.id
+          ? { ...r, status: mutation.status, reviewedBy: actorId, reviewedAt: now }
+          : r,
+      );
+      entity = "child_link_request";
+      entityId = mutation.id;
+      auditAction = `child_link_request_${mutation.status}`;
       break;
     }
   }

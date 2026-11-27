@@ -136,19 +136,42 @@ export function createDefaultRolePermissions(): RolePermissionMatrix {
     audit: nonePerms(),
   };
 
-  const parentModules = Object.fromEntries(
-    ALL_PERMISSION_MODULES.map((m) => [
-      m,
-      m === "overview" ||
-      m === "students" ||
-      m === "attendance" ||
-      m === "grades" ||
-      m === "finance" ||
-      m === "communication"
-        ? readOnlyPerms(false)
-        : nonePerms(),
-    ]),
-  ) as Record<PermissionModule, ModulePermissions>;
+  const parentModules: Record<PermissionModule, ModulePermissions> = {
+    overview: readOnlyPerms(false),
+    reports: nonePerms(),
+    users: nonePerms(),
+    students: readOnlyPerms(false),
+    instructors: nonePerms(),
+    parents: nonePerms(),
+    academics: readOnlyPerms(false),
+    courses: readOnlyPerms(false),
+    subjects: readOnlyPerms(false),
+    timetables: readOnlyPerms(false),
+    attendance: readOnlyPerms(false),
+    grades: readOnlyPerms(true),
+    exams: readOnlyPerms(false),
+    resources: readOnlyPerms(false),
+    certificates: readOnlyPerms(true),
+    enrollments: readOnlyPerms(false),
+    finance: {
+      view: true,
+      create: true,
+      edit: false,
+      delete: false,
+      export: true,
+      approve: false,
+    },
+    communication: {
+      view: true,
+      create: true,
+      edit: false,
+      delete: false,
+      export: false,
+      approve: false,
+    },
+    platform: nonePerms(),
+    audit: nonePerms(),
+  };
 
   const studentModules: Record<PermissionModule, ModulePermissions> = {
     overview: readOnlyPerms(false),
@@ -546,4 +569,15 @@ export function paginateRows<T>(rows: T[], page: number, pageSize: number) {
     pageCount: totalPages,
     total: rows.length,
   };
+}
+
+export function formatCompactDate(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return String(raw);
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }

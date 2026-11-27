@@ -655,10 +655,27 @@ export interface AttendanceDispute {
 export interface ProfileCorrectionRequest {
   id: string;
   studentId: string;
+  requesterId?: string | null;
+  targetType?: "student" | "parent";
   field: "studentCode" | "dateOfBirth" | "classSection" | "guardianName" | "other";
   requestedValue: string;
   reason: string;
   status: "pending" | "approved" | "rejected";
+  createdAt: string;
+}
+
+export interface ChildLinkRequest {
+  id: string;
+  parentId: string;
+  studentIdentifier: string;
+  studentName: string;
+  relationship: string;
+  requestType: "link" | "correction";
+  targetStudentId?: string | null;
+  notes: string;
+  status: "pending" | "approved" | "rejected";
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
   createdAt: string;
 }
 
@@ -708,6 +725,7 @@ export interface OwnerWorkspaceState {
   instructorPayouts: InstructorPayout[];
   courseCompletions: CourseCompletionRecord[];
   profileCorrectionRequests: ProfileCorrectionRequest[];
+  childLinkRequests: ChildLinkRequest[];
 }
 
 export type ProfileRow = Tables<"profiles">;

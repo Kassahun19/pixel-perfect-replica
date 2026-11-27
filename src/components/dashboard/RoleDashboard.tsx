@@ -34,6 +34,7 @@ import { ConfirmButton, EmptyState, ErrorBlock, LoadingBlock, PageHeader, Panel,
 import { OwnerDashboard } from "./owner/OwnerDashboard";
 import { InstructorDashboard } from "./instructor/InstructorDashboard";
 import { StudentDashboard } from "./student/StudentDashboard";
+import { ParentDashboard } from "./parent/ParentDashboard";
 
 type Profile = Tables<"profiles">;
 type UserRole = Tables<"user_roles">;
@@ -229,6 +230,16 @@ export function RoleDashboard() {
   if (role === "student") {
     return (
       <StudentDashboard
+        role={role}
+        roles={roles}
+        onSwitchRole={(nextRole) => setPickedRole(nextRole)}
+      />
+    );
+  }
+
+  if (role === "parent") {
+    return (
+      <ParentDashboard
         role={role}
         roles={roles}
         onSwitchRole={(nextRole) => setPickedRole(nextRole)}
