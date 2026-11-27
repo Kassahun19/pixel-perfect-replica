@@ -253,7 +253,7 @@ export async function fetchYouTubeChannelVideos(
 
   if (uploadsPlaylistId) {
     let pageToken: string | undefined;
-    for (let page = 0; page < 4; page += 1) {
+    for (let page = 0; page < 200; page += 1) {
       const playlistParams = new URLSearchParams({
         part: "contentDetails,snippet",
         playlistId: uploadsPlaylistId,
@@ -365,7 +365,7 @@ export async function fetchYouTubePlaylistVideos(
   const orderedIds: string[] = [];
 
   let pageToken: string | undefined;
-  for (let page = 0; page < 4; page += 1) {
+  for (let page = 0; page < 200; page += 1) {
     const playlistParams = new URLSearchParams({
       part: "contentDetails,snippet",
       playlistId: playlist,

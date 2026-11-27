@@ -231,21 +231,47 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
 
   async function syncLessonsFromYoutube() {
     if (!editing) return;
-    const lessons = maps.lessonsByCourse.get(editing.id) ?? [];
-    if (!lessons.length) return;
     setSyncingYt(true);
     try {
       const apiKey = form.youtubeApiKey.trim();
+      const channelId = form.youtubeChannelId.trim();
+      const playlistId = form.youtubePlaylistId.trim();
+
+      const lessons = maps.lessonsByCourse.get(editing.id) ?? [];
+
       if (!apiKey) {
+        let updatedCount = 0;
         for (const l of lessons) {
           const nextTitle = replaceChannelBranding(l.title);
           if (nextTitle !== l.title) {
             await supabase.from("lessons").update({ title: nextTitle }).eq("id", l.id);
+            updatedCount += 1;
           }
         }
-        await refreshAll("Updated lesson titles with Ezana Academy branding");
+        await refreshAll(`Updated ${updatedCount} lesson titles with Ezana Academy branding`);
         return;
       }
+
+      let ytVideos: YouTubeChannelVideo[] = [];
+      if (playlistId) {
+        ytVideos = await fetchYouTubePlaylistVideos(apiKey, playlistId);
+      } else if (channelId) {
+        ytVideos = await fetchYouTubeChannelVideos(apiKey, channelId);
+      } else {
+        const { data: media } = await supabase
+          .from("lesson_media")
+          .select("lesson_id,video_url")
+          .in(
+            "lesson_id",
+            lessons.map((l) => l.id),
+          );
+        const ytIds = (media ?? []).map((m) => getYouTubeId(m.video_url)).filter((id): id is string => !!id);
+        if (ytIds.length > 0) {
+          const details = await fetchYouTubeVideoDetails(apiKey, ytIds);
+          ytVideos = [...details.values()];
+        }
+      }
+
       const { data: media } = await supabase
         .from("lesson_media")
         .select("lesson_id,video_url")
@@ -254,35 +280,74 @@ export function CourseManagementModule({ data }: { data: OwnerDataHandle }) {
           lessons.map((l) => l.id),
         );
       const vidMap = new Map<string, string>();
+      const existingYtIds = new Set<string>();
       for (const m of media ?? []) {
         const ytId = getYouTubeId(m.video_url);
-        if (ytId) vidMap.set(m.lesson_id, ytId);
+        if (ytId) {
+          vidMap.set(m.lesson_id, ytId);
+          existingYtIds.add(ytId);
+        }
       }
-      const details = await fetchYouTubeVideoDetails(apiKey, [...vidMap.values()]);
+
       let totalMinutes = 0;
+      let updatedCount = 0;
+      let addedCount = 0;
+
       for (const l of lessons) {
-        const d = vidMap.has(l.id) ? details.get(vidMap.get(l.id)!) : undefined;
-        if (d) {
-          const nextMin = d.durationMinutes > 0 ? d.durationMinutes : l.duration_minutes;
+        const ytId = vidMap.get(l.id);
+        const match = ytId ? ytVideos.find((v) => v.id === ytId) : undefined;
+        if (match) {
+          const nextMin = match.durationMinutes > 0 ? match.durationMinutes : l.duration_minutes;
           totalMinutes += nextMin;
           await supabase
             .from("lessons")
             .update({
-              title: d.title || replaceChannelBranding(l.title),
-              description: d.description || null,
+              title: match.title || replaceChannelBranding(l.title),
+              description: match.description || l.description,
               duration_minutes: nextMin,
             })
             .eq("id", l.id);
+          updatedCount += 1;
         } else {
           totalMinutes += l.duration_minutes;
         }
       }
+
+      const newYtVideos = ytVideos.filter((v) => !existingYtIds.has(v.id));
+      if (newYtVideos.length > 0) {
+        const startPos = lessons.reduce((max, l) => Math.max(max, l.position), 0);
+        const { data: createdLessons, error: lErr } = await supabase
+          .from("lessons")
+          .insert(
+            newYtVideos.map((v, i) => ({
+              course_id: editing.id,
+              title: v.title,
+              description: v.description || null,
+              position: startPos + i + 1,
+              duration_minutes: v.durationMinutes,
+            })),
+          )
+          .select("id,position");
+        if (!lErr && createdLessons) {
+          await supabase.from("lesson_media").insert(
+            createdLessons.map((l) => ({
+              lesson_id: l.id,
+              video_url: `https://www.youtube.com/watch?v=${newYtVideos[l.position - startPos - 1]!.id}`,
+            })),
+          );
+          for (const v of newYtVideos) {
+            totalMinutes += v.durationMinutes;
+          }
+          addedCount = newYtVideos.length;
+        }
+      }
+
       if (totalMinutes > 0) {
         const hrs = Math.max(1, Math.round(totalMinutes / 60));
         await supabase.from("courses").update({ duration_hours: hrs }).eq("id", editing.id);
         setForm((f) => ({ ...f, duration_hours: String(hrs) }));
       }
-      await refreshAll("Synced YouTube lesson durations & titles");
+      await refreshAll(`Synced YouTube: updated ${updatedCount}, auto-added ${addedCount} new video(s)`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Sync failed");
     } finally {

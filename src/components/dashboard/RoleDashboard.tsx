@@ -814,11 +814,14 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
     } finally { setLoadingYoutube(false); }
   }
   async function syncExistingLessonDurations() {
-    if (!course || !existingLessons.length) return;
+    if (!course) return;
     setSyncingDurations(true);
     try {
       const apiKey = values.youtubeApiKey.trim();
+      const channelId = values.youtubeChannelId.trim();
+      const playlistId = values.youtubePlaylistId.trim();
       let updatedCount = 0;
+      let addedCount = 0;
 
       if (!apiKey) {
         for (const lesson of existingLessons) {
@@ -835,10 +838,28 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
         }
         await onSynced(
           updatedCount > 0
-            ? `Updated branding to Ezana Academy on ${updatedCount} lesson${updatedCount === 1 ? "" : "s"}. Add a YouTube API key to also sync video lengths.`
+            ? `Updated branding to Ezana Academy on ${updatedCount} lesson${updatedCount === 1 ? "" : "s"}. Add a YouTube API key to also sync video lengths and auto-add new channel videos.`
             : "Lesson titles already use Ezana Academy branding. Add a YouTube API key to sync video lengths.",
         );
         return;
+      }
+
+      let ytVideos: YouTubeChannelVideo[] = [];
+      if (playlistId) {
+        ytVideos = await fetchYouTubePlaylistVideos(apiKey, playlistId);
+      } else if (channelId) {
+        ytVideos = await fetchYouTubeChannelVideos(apiKey, channelId);
+      } else {
+        const lessonIds = existingLessons.map((l) => l.id);
+        const { data: mediaRows } = await supabase
+          .from("lesson_media")
+          .select("lesson_id,video_url")
+          .in("lesson_id", lessonIds);
+        const ytIds = (mediaRows ?? []).map((r) => getYouTubeId(r.video_url)).filter((id): id is string => !!id);
+        if (ytIds.length > 0) {
+          const detailsById = await fetchYouTubeVideoDetails(apiKey, ytIds);
+          ytVideos = [...detailsById.values()];
+        }
       }
 
       const lessonIds = existingLessons.map((l) => l.id);
@@ -849,26 +870,24 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
       if (mediaErr) throw new Error(mediaErr.message);
 
       const videoIdByLesson = new Map<string, string>();
+      const existingYtIds = new Set<string>();
       for (const row of mediaRows ?? []) {
         const ytId = getYouTubeId(row.video_url);
-        if (ytId) videoIdByLesson.set(row.lesson_id, ytId);
-      }
-      const ytIds = [...videoIdByLesson.values()];
-      if (!ytIds.length) {
-        toast.error("No YouTube lessons were found in this course");
-        return;
+        if (ytId) {
+          videoIdByLesson.set(row.lesson_id, ytId);
+          existingYtIds.add(ytId);
+        }
       }
 
-      const detailsById = await fetchYouTubeVideoDetails(apiKey, ytIds);
       let totalMinutes = 0;
 
       for (const lesson of existingLessons) {
         const ytId = videoIdByLesson.get(lesson.id);
-        const detail = ytId ? detailsById.get(ytId) : undefined;
-        if (detail) {
-          const nextMinutes = detail.durationMinutes > 0 ? detail.durationMinutes : lesson.duration_minutes;
-          const nextTitle = detail.title || replaceChannelBranding(lesson.title);
-          const nextDescription = detail.description || (lesson.description ? replaceChannelBranding(lesson.description) : null);
+        const match = ytId ? ytVideos.find((v) => v.id === ytId) : undefined;
+        if (match) {
+          const nextMinutes = match.durationMinutes > 0 ? match.durationMinutes : lesson.duration_minutes;
+          const nextTitle = match.title || replaceChannelBranding(lesson.title);
+          const nextDescription = match.description || (lesson.description ? replaceChannelBranding(lesson.description) : null);
           totalMinutes += nextMinutes;
           if (
             lesson.duration_minutes !== nextMinutes ||
@@ -891,6 +910,35 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
         }
       }
 
+      const newYtVideos = ytVideos.filter((v) => !existingYtIds.has(v.id));
+      if (newYtVideos.length > 0) {
+        const startPos = existingLessons.reduce((max, l) => Math.max(max, l.position), 0);
+        const { data: createdLessons, error: lErr } = await supabase
+          .from("lessons")
+          .insert(
+            newYtVideos.map((v, i) => ({
+              course_id: course.id,
+              title: v.title,
+              description: v.description || null,
+              position: startPos + i + 1,
+              duration_minutes: v.durationMinutes,
+            })),
+          )
+          .select("id,position");
+        if (!lErr && createdLessons) {
+          await supabase.from("lesson_media").insert(
+            createdLessons.map((l) => ({
+              lesson_id: l.id,
+              video_url: `https://www.youtube.com/watch?v=${newYtVideos[l.position - startPos - 1]!.id}`,
+            })),
+          );
+          for (const v of newYtVideos) {
+            totalMinutes += v.durationMinutes;
+          }
+          addedCount = newYtVideos.length;
+        }
+      }
+
       const nextHours = totalMinutes > 0 ? Math.max(1, Math.round(totalMinutes / 60)) : course.duration_hours;
       if (nextHours !== course.duration_hours) {
         const { error: courseErr } = await supabase.from("courses").update({ duration_hours: nextHours }).eq("id", course.id);
@@ -899,9 +947,7 @@ function CourseEditor({ open, course, existingLessons, role, userId, instructors
       }
 
       await onSynced(
-        updatedCount > 0
-          ? `Synced Ezana Academy titles & dynamic durations for ${updatedCount} lesson${updatedCount === 1 ? "" : "s"}`
-          : "All YouTube lesson titles and durations are already up to date",
+        `Synced YouTube: updated ${updatedCount} lesson(s), auto-added ${addedCount} new video(s)`,
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not sync YouTube lessons");
